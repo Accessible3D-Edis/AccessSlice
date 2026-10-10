@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy to packaging/signing.json (git-ignored) and fill in ONE of the sign_args forms below. See packaging/README.md.",
+  "sign_args": ["/sha1", "THUMBPRINT-OF-THE-CERTIFICATE-IN-YOUR-USER-STORE"],
+  "timestamp": "http://timestamp.digicert.com",
+  "_forms": {
+    "certificate in the Windows user store (USB token, smart card, or imported)": ["/sha1", "<thumbprint>"],
+    "Azure Trusted Signing": ["/dlib", "C:\\path\\to\\Azure.CodeSigning.Dlib.dll", "/dmdf", "C:\\path\\to\\metadata.json"],
+    "SignPath Foundation": "signs on their service after the build; no local sign_args - see README"
+  }
+}

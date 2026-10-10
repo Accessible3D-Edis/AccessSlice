@@ -1,0 +1,73 @@
+{
+    "error_string": "Success.",
+    "export_time": 2192,
+    "layer_height": 0.20000000298023224,
+    "plate_index": 0,
+    "prepare_time": 413,
+    "return_code": 0,
+    "sliced_plates": [
+        {
+            "feature_type_times": {
+                "Bridge": 357.3913879394531,
+                "Brim": 1.7712287902832031,
+                "Custom": 298.502197265625,
+                "Flush": 15.0,
+                "Gap infill": 550.2483520507813,
+                "Inner wall": 981.0895385742188,
+                "Internal solid infill": 810.4152221679688,
+                "Outer wall": 1951.09326171875,
+                "Overhang wall": 401.8282165527344,
+                "Sparse infill": 53.06983184814453,
+                "Support": 1498.6336669921875,
+                "Support interface": 228.6284942626953,
+                "Top surface": 198.91259765625,
+                "Travel": 3160.332763671875,
+                "Undefined": 3154.20703125
+            },
+            "filament_change_times": 0,
+            "filaments": [
+                {
+                    "filament_id": "GFG02",
+                    "id": 2,
+                    "main_used_g": 37.874237060546875,
+                    "total_used_g": 37.87423324584961
+                }
+            ],
+            "generate_support_material_time": 10757,
+            "id": 1,
+            "infill_time": 1974,
+            "layer_filament_change": 0,
+            "main_predication": 10179.896484375,
+            "make_perimeters_time": 3181,
+            "obj_cached_cnt": 0,
+            "objects": [
+                {
+                    "bbox": {
+                        "depth": 76.86349487304688,
+                        "height": 76.84639739990234,
+                        "width": 50.0,
+                        "x": 140.0,
+                        "y": 121.56825256347656,
+                        "z": 4.8828496801434085e-11
+                    },
+                    "id": 5,
+                    "name": "blind-Benchy.stl",
+                    "triangle_count": 94745
+                }
+            ],
+            "sliced_time": 24542,
+            "sliced_time_with_cache": 6843,
+            "total_predication": 10502.2724609375,
+            "triangle_count": 94745,
+            "warning_message": ""
+        }
+    ],
+    "sparse_infill_density": 15.0,
+    "upward_compatible_machine": [
+        "Bambu Lab H2S 0.4 nozzle",
+        "Bambu Lab H2D 0.4 nozzle",
+        "Bambu Lab H2D Pro 0.4 nozzle",
+        "Bambu Lab A2L 0.4 nozzle"
+    ],
+    "wall_loops": 2
+}

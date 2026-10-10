@@ -1,0 +1,599 @@
+/* AccessSlice visual design - the Phase IV design system.
+ *
+ * Goals, in order: readable for low vision, pleasant for everyone,
+ * honest structure (the layout mirrors the heading/landmark structure a
+ * screen reader hears). Large type, strong contrast, real dark mode,
+ * obvious focus, and everything still works at 400% zoom because the
+ * layout is a single column that simply reflows.
+ *
+ * Everything is built from the tokens below. The colours are checked
+ * by tests\test_design.py against WCAG contrast (4.5:1 for text, 3:1
+ * for controls) in BOTH themes, so a palette tweak that breaks
+ * readability fails the suite. Dark mode swaps the tokens only.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces and text */
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-2: #e9ebee;
+  --text: #16191d;
+  --muted: #4b5563;
+
+  /* The one accent, and its soft tint for selected/active states */
+  --accent: #0b5ea8;
+  --accent-hover: #084a86;
+  --accent-text: #ffffff;
+  --accent-soft: #e2eefb;
+
+  /* Meaning colours: warnings, success, danger */
+  --warn: #9a3412;
+  --warn-soft: #fff0e6;
+  --ok: #1c6b3c;
+  --ok-soft: #e4f4ea;
+  --danger: #b3261e;
+
+  --border: #c9ced6;
+  --border-strong: #8b929c;
+  --focus: #c2410c;
+  /* The 3D view's build plate: a shade objects of any filament
+     colour stand out against, white and black included. */
+  --plate: #cfd5dd;
+  --plate-grid: #aab2bd;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 16px rgba(16, 24, 40, 0.08);
+
+  /* Type scale (1.125rem base for low vision) and spacing */
+  --text-base: 1.125rem;
+  --text-sm: 1rem;
+  --text-xs: 0.9rem;
+  --text-h3: 1.15rem;
+  --text-h2: 1.35rem;
+  --text-h1: 1.85rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --measure: 52rem;      /* comfortable reading width */
+  --measure-wide: 88rem; /* editor pages with the 3D view */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121417;
+    --surface: #1b1e23;
+    --surface-2: #252930;
+    --text: #eceef1;
+    --muted: #b1b8c2;
+    --accent: #7dbcf7;
+    --accent-hover: #a5d1fa;
+    --accent-text: #0b1522;
+    --accent-soft: #17304b;
+    --warn: #ffb27a;
+    --warn-soft: #3a2412;
+    --ok: #86d6a0;
+    --ok-soft: #163523;
+    --danger: #ff8a80;
+    --border: #3b414a;
+    --border-strong: #6b7280;
+    --focus: #ffd166;
+    --plate: #343a44;
+    --plate-grid: #4b5361;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.45);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.6;
+  /* Long unbreakable tokens (raw setting keys, file paths) must wrap
+     rather than force sideways scrolling at 400% zoom; only kicks in
+     when a word alone cannot fit the line. Found on /project/all,
+     /project/filaments, /files and /diagnostics (2026-08-31). */
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a, button, .button, input, select { transition: background-color 120ms, border-color 120ms, color 120ms; }
+}
+
+/* Obvious focus everywhere - never removed, only strengthened. A
+   two-tone ring (colour plus a light gap) stays visible on any
+   background, including the accent-coloured banner and buttons. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* ---------------------------------------------------------- banner */
+
+.banner {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  align-items: center;
+}
+
+.app-name {
+  color: var(--accent);
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-name:hover { text-decoration: underline; }
+
+/* The logo mark: a small plate with a layer stack, drawn in CSS so
+   nothing is fetched and screen readers hear only the name. */
+.app-mark {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 5px;
+  background: linear-gradient(180deg, var(--accent) 0 30%, transparent 30% 40%,
+              var(--accent) 40% 70%, transparent 70% 80%, var(--accent) 80%);
+  flex: none;
+}
+
+.project-note {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.banner nav { margin-left: auto; }
+
+.banner nav ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  padding: 0;
+  margin: 0;
+}
+
+.banner nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-sm);
+}
+
+.banner nav a:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------------------------------------------------------- status */
+
+.status:not(:empty) {
+  background: var(--ok-soft);
+  border: 1px solid var(--ok);
+  border-left-width: 6px;
+  border-radius: var(--radius-sm);
+  margin: var(--space-4) auto 0;
+  max-width: var(--measure);
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+
+/* The copy of the result message that app.js places right after the
+   control the user pressed, so the result is one arrow-press away. */
+.inline-status {
+  background: var(--ok-soft);
+  border: 1px solid var(--ok);
+  border-left-width: 6px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ main */
+
+main {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-5) 7rem;
+}
+
+main.wide { max-width: var(--measure-wide); }
+
+h1 {
+  font-size: var(--text-h1);
+  line-height: 1.25;
+  margin: var(--space-5) 0 var(--space-3);
+  letter-spacing: -0.01em;
+}
+h2 { font-size: var(--text-h2); line-height: 1.3; margin: var(--space-6) 0 var(--space-2); }
+h3 { font-size: var(--text-h3); margin: var(--space-5) 0 var(--space-2); }
+
+p { margin: 0.6rem 0; }
+
+a { color: var(--accent); text-underline-offset: 0.15em; }
+a:hover { color: var(--accent-hover); }
+
+strong { font-weight: 700; }
+
+kbd {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 3px;
+  border-radius: 5px;
+  padding: 0.05em 0.45em;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.hint, .help { color: var(--muted); font-size: var(--text-sm); margin: 0.2rem 0 0.5rem; }
+.raw-key { display: block; font-size: var(--text-xs); color: var(--muted); }
+
+/* Warnings and staged-change notes: warn colour plus a soft tint
+   block, so they are found by colour, by shape and by words. */
+.unsaved-note {
+  color: var(--warn);
+  font-weight: 600;
+  background: var(--warn-soft);
+  border-left: 5px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.unsaved-note p { margin: 0.3rem 0; }
+.staged { color: var(--warn); font-weight: 600; font-size: 0.95rem; }
+
+/* The project facts strip at the top of every editor page. */
+ul.summary {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-3) 0 var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-2);
+}
+ul.summary li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+ul.plain-list { list-style: none; padding: 0; }
+ul.plain-list li { margin: var(--space-2) 0; }
+
+/* Pre-flight warnings on the Slice-and-send page: each item gets a
+   warn-coloured edge so sighted users spot them too. */
+ul.warnings { list-style: none; padding: 0; margin: var(--space-3) 0 var(--space-4); }
+ul.warnings li {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 5px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+}
+ol.review-list li { margin: var(--space-4) 0; }
+
+/* ---------------------------------------------------------- cards */
+
+fieldset, .card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow);
+}
+
+legend {
+  font-weight: 700;
+  padding: 0 var(--space-2);
+  font-size: var(--text-h3);
+}
+legend h2 { margin: 0; font-size: var(--text-h3); }
+
+.setting-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0;
+}
+fieldset .setting-row { background: var(--surface-2); border-color: transparent; }
+.setting-row > label:first-child, fieldset > label:first-of-type { margin-top: 0; }
+.setting-row .hint { margin-top: 0; }
+
+/* ---------------------------------------------------------- forms */
+
+label { display: block; font-weight: 600; margin-top: var(--space-3); }
+.radio-row { display: block; font-weight: 400; margin: 0.4rem 0; }
+
+input[type="text"], input[type="search"], input[type="number"], select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin: var(--space-1) 0 var(--space-2);
+  max-width: 100%;
+  min-height: 2.75rem;
+}
+input[type="text"]:hover, select:hover { border-color: var(--accent); }
+
+input[type="checkbox"], input[type="radio"] {
+  width: 1.4rem;
+  height: 1.4rem;
+  accent-color: var(--accent);
+  vertical-align: -0.3rem;
+  margin-right: 0.45rem;
+}
+
+input[type="range"] {
+  width: 100%;
+  max-width: 30rem;
+  accent-color: var(--accent);
+  min-height: 2.75rem;
+}
+
+/* --------------------------------------------------------- buttons */
+
+button, .button {
+  display: inline-block;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.1rem;
+  margin: 0.3rem 0.4rem 0.3rem 0;
+  min-height: 2.75rem;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+button:hover, .button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+button.primary, .button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+button.primary:hover, .button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-text);
+}
+
+button.quiet, .button.quiet { border-color: transparent; background: transparent; }
+
+button[disabled] { opacity: 0.5; cursor: not-allowed; }
+button[disabled]:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface); }
+
+button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.inline-form { display: inline; }
+
+/* ------------------------------------------------------------ tabs */
+
+nav ul.tabs {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  margin: var(--space-4) 0;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+nav ul.tabs a {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+nav ul.tabs a:hover { background: var(--surface); color: var(--accent); }
+
+nav ul.tabs a[aria-current="page"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* ------------------------------------------------------ bottom bar */
+
+.bottom-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.1);
+  padding: var(--space-2) var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+}
+
+/* At high zoom or on small screens the fixed bar would eat the page,
+   so it becomes a normal block at the end of the content instead. */
+@media (max-height: 30rem), (max-width: 26rem) {
+  .bottom-bar { position: static; box-shadow: none; margin-top: var(--space-5); }
+  main { padding-bottom: var(--space-4); }
+}
+
+/* ------------------------------------------------------------ home */
+
+.hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-5);
+  margin: var(--space-4) 0;
+}
+.hero h1 { margin-top: 0; }
+
+/* The monthly coffee pop-up and the per-tab help line share the
+   surface tokens, so no new colour pair enters the palette. */
+.coffee {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-4) auto;
+  max-width: min(36rem, calc(100vw - 2rem));
+}
+.coffee::backdrop { background: rgba(0, 0, 0, 0.55); }
+.coffee h2 { margin-top: 0; }
+.coffee .actions { margin-top: var(--space-3); }
+.tab-help { margin: 0 0 var(--space-3); font-size: var(--text-sm); }
+
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; }
+.actions .button { margin: 0; }
+
+/* Printer control (2026-09-12): a command form that carries fields
+   takes a row of its own; plain button forms flow side by side. */
+.actions .block { flex-basis: 100%; }
+.actions .block .setting-row { max-width: 32rem; }
+.actions .block button { margin-top: var(--space-2); }
+#free-gcode, #snippet { width: 100%; max-width: 32rem; box-sizing: border-box; }
+
+.link-cards { list-style: none; padding: 0; margin: var(--space-3) 0; display: grid; gap: var(--space-2); }
+.link-cards a {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+  color: var(--text);
+}
+.link-cards a:hover { border-color: var(--accent); color: var(--accent); }
+.link-cards a strong { display: block; color: var(--accent); }
+
+/* ---------------------------------------------------- diagnostics */
+
+/* The activity log: readable monospace that wraps long traceback
+   lines instead of forcing sideways scrolling. */
+.diagnostics-log {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+}
+
+/* ------------------------------------------------------- 3D views */
+
+/* The Placement tab on a wide screen: the fields on the left, the 3D
+   view on the right, kept in sight while fields are edited. At narrow
+   widths or high zoom it is one column again, form first (the DOM
+   order a screen reader hears), view after. */
+.with-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (min-width: 70rem) {
+  .with-view { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .with-view .view-panel { position: sticky; top: var(--space-4); }
+}
+
+.view-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+.view-panel h2, .view-panel h3 { margin-top: 0; }
+
+.view-stage {
+  width: 100%;
+  height: min(60vh, 34rem);
+  min-height: 14rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+  touch-action: none;
+}
+.view-stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.view-stage canvas.dragging { cursor: grabbing; }
+
+.view-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; margin: var(--space-2) 0; }
+.view-toolbar button { margin: 0; padding: 0.4rem 0.8rem; min-height: 2.5rem; font-size: var(--text-sm); }
+.view-toolbar label { margin: 0; font-size: var(--text-sm); }
+.view-toolbar select { margin: 0; min-height: 2.5rem; font-size: var(--text-sm); }
+
+.view-status { font-size: var(--text-sm); color: var(--muted); min-height: 1.5em; margin: var(--space-2) 0; }
+.view-note { font-size: var(--text-sm); color: var(--muted); }
+
+.legend-list { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.legend-list li { font-size: var(--text-sm); }
+.swatch { display: inline-block; width: 1em; height: 1em; border-radius: 3px; vertical-align: -0.1em; margin-right: 0.35em; border: 1px solid var(--border-strong); }
+
+/* A fieldset the 3D view has just picked (click on an object) gets
+   the accent edge so the eye lands on it. */
+fieldset.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow); }
+
+/* The sliced preview page's layer controls. */
+.layer-controls { display: grid; gap: var(--space-2); }
+.layer-controls fieldset { margin: var(--space-2) 0; padding: var(--space-2) var(--space-4); box-shadow: none; }
+.layer-controls fieldset .radio-row { display: inline-block; margin: 0.2rem 1.2rem 0.2rem 0; }
+.layer-controls .row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; }
+.layer-controls input[type="number"] { width: 7rem; }
+
+table.facts { border-collapse: collapse; width: 100%; margin: var(--space-3) 0; font-size: var(--text-sm); }
+table.facts th, table.facts td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.facts th { color: var(--muted); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,16 @@
+{
+    "error_string": "Invalid parameters to the slicer.",
+    "export_time": 0,
+    "layer_height": 0.0,
+    "plate_index": 0,
+    "prepare_time": 0,
+    "return_code": -2,
+    "sparse_infill_density": 0.0,
+    "upward_compatible_machine": [
+        "Bambu Lab H2S 0.4 nozzle",
+        "Bambu Lab H2D 0.4 nozzle",
+        "Bambu Lab H2D Pro 0.4 nozzle",
+        "Bambu Lab A2L 0.4 nozzle"
+    ],
+    "wall_loops": 0
+}

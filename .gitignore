@@ -1,0 +1,19 @@
+# Python bytecode caches
+__pycache__/
+*.pyc
+
+# AccessSlice runtime artefacts that must never be committed
+*.pre-edit-backup.3mf
+config.json
+experiments/viewport-spike/spike.html
+
+# Test runner cache
+.pytest_cache/
+
+# Packaging outputs (packaging/build.py); the icon and scripts are tracked
+packaging/build/
+packaging/dist/
+packaging/output/
+
+# Local code-signing configuration (certificate selection); never shared
+packaging/signing.json
