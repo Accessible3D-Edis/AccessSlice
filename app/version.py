@@ -6,4 +6,4 @@ the number on the download, in the window and in the Apps list can
 never disagree.
 """
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"

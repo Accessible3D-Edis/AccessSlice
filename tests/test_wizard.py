@@ -330,7 +330,9 @@ class TestCrealityWalkthrough(WizardCase):
         self.assertIn("Device", body)
         self.folders(2, support.make_fake_creality(F.sandbox))
         _s, _h, body = request("GET", "/welcome/4")
-        self.assertIn("every new job starts this same way", body)
+        self.assertIn("only creating the project</strong>", body)
+        self.assertIn("sending the print straight to the printer", body)
+        self.assertIn("never needed to slice or to send", body)
 
 
 class TestProjectPrinter(unittest.TestCase):

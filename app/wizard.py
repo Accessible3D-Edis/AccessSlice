@@ -260,12 +260,21 @@ def project_html(slicer, projects_dir, texts, model_file_available=True):
                  "just a model file, and the slicer window is not needed "
                  "to make projects.</p>")
     else:
-        later = (f"<p>{esc(slicer_name)}'s engine cannot build a project "
-                 "from a model file by itself, so every new job starts "
-                 f"this same way: Start a new print job opens "
-                 f"{esc(slicer_name)}, you import and save, and AccessSlice "
-                 "opens the saved project the moment it appears. "
-                 "Everything after that happens in AccessSlice.</p>")
+        # Edis, 2026-10-11: "every new job starts this same way" read
+        # as if sending went through the slicer too - it does not.
+        later = (f"<p>One thing is different with {esc(slicer_name)}: "
+                 "its engine cannot turn a model file into a project by "
+                 "itself, so <strong>only creating the project</strong> "
+                 f"happens in {esc(slicer_name)}, for every new job. "
+                 f"Start a new print job opens {esc(slicer_name)}, you "
+                 "import the model and save the project, and AccessSlice "
+                 "opens the saved project the moment it appears.</p>"
+                 "<p><strong>Everything after that happens in "
+                 "AccessSlice</strong>: the settings, slicing, the "
+                 "report, sending the print straight to the printer over "
+                 "your network, and following and controlling the "
+                 f"printer. {esc(slicer_name)} is never needed to slice "
+                 "or to send.</p>")
     return f"""
 <p>AccessSlice builds every new print job on a project you saved in
 {esc(slicer_name)} for that printer - that is where the printer's

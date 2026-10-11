@@ -121,7 +121,7 @@ AccessSlice never needs the internet.
 1. Open the **Releases** page of this project on GitHub:
    https://github.com/Accessible3D-Edis/AccessSlice/releases
 2. Under the newest release, download `AccessSlice-Setup-<version>.exe`
-   (for example `AccessSlice-Setup-1.0.0.exe`).
+   (for example `AccessSlice-Setup-1.0.1.exe`).
 3. Run the downloaded file. The installer is a standard Windows
    installer and reads well with a screen reader. Press Next through
    its pages; the defaults are right for almost everyone.
@@ -241,10 +241,12 @@ is needed once; AccessSlice does the rest from then on.
 - The printer stays on Creality's normal firmware. Nothing has to be
   rooted, and no password is needed.
 - One project saved from Creality Print for that printer (Ctrl+Shift+S
-  is Save project as), in the AccessSlice projects folder. Creality
-  Print's engine cannot import a raw model file, so new jobs for
-  Creality printers always start with a project saved in Creality
-  Print.
+  is Save project as), in the AccessSlice projects folder.
+- Creating each new project happens in Creality Print, because its
+  engine cannot turn a model file into a project by itself: Start a
+  new print job opens Creality Print, you import the model and save,
+  and AccessSlice opens the project. Only that step: slicing and
+  sending to the printer always happen in AccessSlice.
 - AccessSlice then sends, follows and controls the printer itself,
   including loading and unloading filament through the CFS.
 
@@ -262,10 +264,15 @@ is needed once; AccessSlice does the rest from then on.
    AccessSlice builds the project itself, on the settings of your
    newest saved project for that printer, and opens it. A large model
    can take a while; the building page tells you the stage and the
-   time every 15 seconds. (Creality Print's engine cannot import a
-   model file, so for Creality printers AccessSlice opens Creality
-   Print instead: import the model with Ctrl+I, save the project with
-   Ctrl+Shift+S, and AccessSlice opens it the moment it is saved.)
+   time every 15 seconds.
+
+   Creality printers differ in this one step only: Creality Print's
+   engine cannot turn a model file into a project, so AccessSlice
+   opens Creality Print for you. Import the model with Ctrl+I, save
+   the project with Ctrl+Shift+S, and AccessSlice opens it the moment
+   it is saved. Everything after that - settings, slicing and sending
+   to the printer - happens in AccessSlice, exactly as for the other
+   brands.
 
    Or **Open a project file** you saved earlier. Your projects folder
    is listed newest first.
