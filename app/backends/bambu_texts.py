@@ -150,9 +150,10 @@ screen-reader-doable from start to finish.</p>
 <h2>Real AMS filament colours</h2>
 <p>The colours stored in the project are display-only. The colours that
 actually print come from the AMS units, synced inside {name}.
-AccessSlice edits which filament SLOT each object uses - that part is
-real - but what is loaded in each slot is between Studio and the
-printer.</p>
+AccessSlice edits which of the project's filaments each object uses -
+that part is real - but which AMS slot feeds each filament is chosen
+in {name}'s send window, so filament 1 here can print from AMS slot
+3.</p>
 
 <h2>Which plate gets sliced</h2>
 <p>A multi-plate project does not record a chosen plate in the file;

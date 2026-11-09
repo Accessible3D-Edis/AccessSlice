@@ -547,15 +547,15 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(status, 303)
         self.assertIn("change(s) staged", location_of(headers))
         _s, _h, body = get("/project/filaments")
-        self.assertIn('<option value="4" selected>Slot 4 - ', body)
+        self.assertIn('<option value="4" selected>Filament 4 - ', body)
         self.assertNotIn('<option value="2" selected>', body)
         # The presets tab carries the same chooser.
         _s, _h, body = get("/project/presets")
-        self.assertIn('<option value="4" selected>Slot 4 - ', body)
+        self.assertIn('<option value="4" selected>Filament 4 - ', body)
         # Choosing the file's slot again withdraws the change.
         post("/project/filaments", ext__2="2")
         _s, _h, body = get("/project/filaments")
-        self.assertIn('<option value="2" selected>Slot 2 - ', body)
+        self.assertIn('<option value="2" selected>Filament 2 - ', body)
         session = server.state["session"]
         self.assertFalse([c for c in session.pending
                           if c["kind"] == "extruder"])
@@ -964,6 +964,7 @@ class EndToEndTests(unittest.TestCase):
         import newjob
         merged = support.copy_test_project(F.sandbox,
                                            name="merged-fixture.3mf")
+        newjob.mark_objects(merged)
         support.add_duplicate_object(merged)
         script = support.make_fake_merge(F.sandbox)
         import sys as _sys
@@ -1068,7 +1069,7 @@ class EndToEndTests(unittest.TestCase):
         location = location_of(headers)
         self.assertTrue(location.startswith("/start"))
         self.assertIn("Problem:", location)
-        self.assertIn("without writing its result", location)
+        self.assertIn("stopped unexpectedly", location)
 
     # ---- the Device page follows a send (Edis's 2026-09-23 print:
     # an H2C send while Studio watched an X1 Carbon print kept the X1

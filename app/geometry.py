@@ -201,6 +201,38 @@ def shape_of_object(model_xml, entries, objectid):
 # --------------------------------------------------------- auto-orient
 
 
+def largest_flat_direction(verts, tris):
+    """The outward direction of the model's largest flat side - the
+    one that should point down to lay that side on the plate - or None
+    for a mesh without area. Triangle areas are added up per
+    (quantised) normal direction, as best_down_direction does, and the
+    biggest group wins outright: no overhang judgement, because the
+    person asked for exactly this side (an image relief's flat back).
+    """
+    buckets = {}
+    for a, b, c in tris:
+        va, vb, vc = verts[a], verts[b], verts[c]
+        n = _cross((vb[0] - va[0], vb[1] - va[1], vb[2] - va[2]),
+                   (vc[0] - va[0], vc[1] - va[1], vc[2] - va[2]))
+        length = math.sqrt(_dot(n, n))
+        if length < 1e-12:
+            continue
+        key = (round(n[0] / length, 2), round(n[1] / length, 2),
+               round(n[2] / length, 2))
+        g = buckets.setdefault(key, [0.0, 0.0, 0.0, 0.0])
+        g[0] += length / 2.0
+        g[1] += n[0] / 2.0
+        g[2] += n[1] / 2.0
+        g[3] += n[2] / 2.0
+    if not buckets:
+        return None
+    best = max(buckets.values(), key=lambda g: g[0])
+    size = math.sqrt(best[1] ** 2 + best[2] ** 2 + best[3] ** 2)
+    if size < 1e-12:
+        return None
+    return (best[1] / size, best[2] / size, best[3] / size)
+
+
 def best_down_direction(verts, tris, candidates=14):
     """The direction that should point straight down for the most
     printable lie, or None when the current bottom already wins.

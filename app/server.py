@@ -56,7 +56,9 @@ Routes:
 
 import datetime
 import json
+import shutil
 import subprocess
+import tempfile
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,10 +70,12 @@ import config_store
 import coffee
 import wizard
 import diagnostics
+import filedialog
 import usbcopy
 import geometry
 import preview
 import printer_control
+import slicer_project
 import toolpath
 import viewport
 import webui
@@ -862,6 +866,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._refuse("the Host header names another server")
             if not self._post_is_from_own_page():
                 return self._refuse("the post came from another website")
+            # The Open dialog waits for the person, so it never holds
+            # the lock every other action needs.
+            if self._path_parts() == ["browse"]:
+                return self._post_browse()
             with state["lock"]:
                 self._route_post()
         except ConnectionError:
@@ -876,6 +884,24 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         except Exception as e:
             self._send_unexpected_error_page(e, "carrying out that action")
+
+    def _post_browse(self):
+        """The Browse buttons (app.js): show Windows' Open dialog and
+        answer with the chosen path as JSON - "" when cancelled, plus
+        a plain-language problem when no dialog could be shown."""
+        form = self._form()
+        kind = form.get("kind", [""])[0]
+        current = form.get("current", [""])[0]
+        if kind not in filedialog.KINDS:
+            kind = "any"
+        try:
+            path = filedialog.choose(kind, current)
+            return self._send_json({"path": path, "problem": ""})
+        except filedialog.DialogUnavailable as e:
+            diagnostics.log(f"Browse dialog not shown: {e}")
+            return self._send_json({"path": "", "problem": (
+                "The Windows Open dialog could not be shown, so type "
+                "the full path into the field instead.")})
 
     def _route_post(self):
         parts = self._path_parts()
@@ -1003,6 +1029,19 @@ class Handler(BaseHTTPRequestHandler):
             return_to = field("return_to")
             if not return_to.startswith("/project/"):
                 return_to = "/project/quality"
+            return self._redirect(return_to, msg=" ".join(lines))
+
+        if parts[1] == "remove-empty-plates":
+            return_to = field("return_to")
+            if not return_to.startswith("/project/"):
+                return_to = "/project/placement"
+            try:
+                lines = session.remove_empty_plates()
+            except ProjectError as e:
+                return self._redirect(return_to, msg=f"Problem: {e}")
+            viewport.reset_cache(session)
+            diagnostics.log(f"Empty plates removed on "
+                            f"{session.path.name}: " + " ".join(lines))
             return self._redirect(return_to, msg=" ".join(lines))
 
         if parts[1] == "backups":
@@ -2137,7 +2176,8 @@ class Handler(BaseHTTPRequestHandler):
         # is the whole request - the position fields on the page are
         # ignored, so a half-typed number never sneaks into an
         # automatic result.
-        if field("arrange") or field("orient") or field("orient_plate"):
+        if (field("arrange") or field("orient") or field("orient_plate")
+                or field("lay")):
             return self._post_auto_placement(session, field)
         if (field("copy") or field("remove") or field("add_model")
                 or field("arrange_spill")):
@@ -2273,6 +2313,25 @@ class Handler(BaseHTTPRequestHandler):
                        "Everything already sits where arranging would "
                        "put it - nothing staged.")
                 msg += "".join(" " + n for n in notes)
+            elif field("lay"):
+                oid = field("lay")
+                name = names.get(oid, f"object {oid}")
+                side = field(f"lay_side__{oid}", "largest") or "largest"
+                if side not in session.LAY_SIDES:
+                    side = "largest"
+                words = session.SIDE_RESULT[side]
+                if session.stage_orient(oid, side=side):
+                    if session.orient_is_drop(oid):
+                        msg = (f"{name} already lies that way, but was "
+                               "off the plate - staged setting it down "
+                               "onto the plate.")
+                    else:
+                        msg = (f"Staged: {name} will be turned with its "
+                               f"{words} facing the plate, resting on "
+                               "it in the same spot.")
+                else:
+                    msg = (f"{name} already lies that way - nothing to "
+                           "change.")
             elif field("orient"):
                 oid = field("orient")
                 name = names.get(oid, f"object {oid}")
@@ -2787,11 +2846,33 @@ class Handler(BaseHTTPRequestHandler):
                     f"Slice {finished.status} on {session.path.name} "
                     f"after {e} s: {problem}")
 
+        # One plate of several: the engine slices a copy holding that
+        # plate alone, so the printable file has no other plate for
+        # the slicer's send window (or a USB print) to land on.
+        single = {}
+        if (plate != "0" and session.supports_plates
+                and len(session.plates()) > 1):
+            folder = Path(tempfile.mkdtemp(prefix="accessslice-plate-"))
+            try:
+                single = {"engine_input": slicer_project.one_plate_copy(
+                              session.path, plate,
+                              folder / session.path.name),
+                          "engine_plate": 1}
+            except ProjectError as e:
+                shutil.rmtree(folder, ignore_errors=True)
+                if "nothing on it" in str(e):
+                    raise
+                diagnostics.log(f"One-plate copy not made ({e}); "
+                                "slicing the whole project's plate")
+
         state["preview"].reset()
         state["slice_job"] = engine.SliceJob(
-            exe, session.path, plate=int(plate), on_finish=log_outcome)
+            exe, session.path, plate=int(plate), on_finish=log_outcome,
+            **single)
         what = "all plates" if plate == "0" else f"plate {plate}"
-        diagnostics.log(f"Slice started on {session.path.name} ({what})")
+        diagnostics.log(f"Slice started on {session.path.name} ({what}"
+                        + (", as a one-plate copy" if single else "")
+                        + ")")
         return self._redirect("/project/slicing")
 
     @staticmethod

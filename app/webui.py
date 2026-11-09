@@ -126,6 +126,41 @@ def page(title, body, msg=None, project=None, wide=False, scripts=(),
 </html>"""
 
 
+def browse_button(field_id, kind, what):
+    """A Browse button for a path field: app.js shows it and, when it is
+    pressed, opens Windows' Open dialog (POST /browse) and puts the
+    chosen path into the field. Hidden without script, where the field
+    still takes a typed or pasted path as always."""
+    return (f'<button type="button" class="browse-button" hidden '
+            f'data-browse-for="{esc(field_id)}" '
+            f'data-browse-kind="{esc(kind)}">Browse for {esc(what)}'
+            '</button>')
+
+
+def _empty_plates_html(session, return_to):
+    """The empty-plate warning with its Remove button, or "".
+
+    A form of its own - pages place it outside their other forms."""
+    finder = getattr(session, "empty_plates", None)
+    empty = finder() if finder else []
+    if not empty:
+        return ""
+    if len(empty) == 1:
+        which = f"Plate {esc(empty[0])} has nothing on it"
+    else:
+        which = ("Plates " + ", ".join(esc(p) for p in empty[:-1])
+                 + f" and {esc(empty[-1])} have nothing on them")
+    return (f'<div class="unsaved-note"><p>{which}. An empty plate '
+            "gives the slicer nothing to slice, and when the project "
+            "is opened in the slicer to send, its Slice and Send keys "
+            "can land on that plate so the job cannot be sent. "
+            "Removing it moves the plates after it up a place.</p>"
+            + _button_form("/project/remove-empty-plates",
+                           "Remove the empty plates",
+                           hidden={"return_to": return_to})
+            + "</div>")
+
+
 def _button_form(action, label, hidden=None, cls="", confirm_note=None):
     """A one-button POST form - the accessible way to make action links."""
     fields = "".join(
@@ -213,6 +248,7 @@ def render_setup(config, detected_exe, slicers, configured=False,
     <label for="projects_dir">Projects folder</label>
     <input type="text" id="projects_dir" name="projects_dir"
            value="{esc(projects_value)}" size="60" required>
+    {browse_button("projects_dir", "folder", "the folder")}
   </fieldset>
   <fieldset>
     <legend><h2>3. Where is your slicer installed?</h2></legend>
@@ -220,6 +256,7 @@ def render_setup(config, detected_exe, slicers, configured=False,
     <label for="slicer_exe">Slicer program path</label>
     <input type="text" id="slicer_exe" name="slicer_exe"
            value="{esc(exe_value)}" size="60" required>
+    {browse_button("slicer_exe", "exe", "the program")}
   </fieldset>
   <button class="primary" id="btn-finish-setup">{esc(finish)}</button>
 </form>
@@ -308,6 +345,7 @@ is fine for almost everyone.</p>
   <label for="projects_dir">Projects folder</label>
   <input type="text" id="projects_dir" name="projects_dir"
          value="{esc(v.get('projects_dir', ''))}" size="60" required>
+  {browse_button("projects_dir", "folder", "the folder")}
 </div>
 <h2>Where is {esc(v.get('slicer_name', 'the slicer'))} installed?</h2>
 <p id="exe-note">{exe_note}</p>
@@ -315,6 +353,7 @@ is fine for almost everyone.</p>
   <label for="slicer_exe">Slicer program path</label>
   <input type="text" id="slicer_exe" name="slicer_exe"
          value="{esc(v.get('slicer_exe', ''))}" size="60">
+  {browse_button("slicer_exe", "exe", "the program")}
 </div>
 <button class="primary" id="wizard-next">Save and go to the next
 step</button>
@@ -511,15 +550,18 @@ TOUR_TABS = {
                  "plate."),
     "others": ("Print sequence, spiral vase, timelapse, fuzzy skin and "
                "other less common settings."),
-    "filaments": ("Which filament prints each object (the slot numbers "
-                  "match your AMS or spool holder), temperatures, flow, "
+    "filaments": ("Which filament prints each object (numbered as in "
+                  "the project's filament list), temperatures, flow, "
                   "flushing and the prime tower."),
     "presets": ("The printer, the print profile and each filament's "
                 "preset from your slicer's own library - the same choices "
                 "the slicer's top bar offers."),
     "placement": ("Where every object sits on the plate, in millimetres "
-                  "and in words, with rotate, scale, arrange, auto-orient "
-                  "and move-to-plate - including a new plate. Copies of "
+                  "and in words, with rotate, scale, arrange, auto-orient, "
+                  "a choice of which side faces down (the largest flat "
+                  "side, upside down and more) and move-to-plate - "
+                  "including a new plate - and a button that removes "
+                  "empty plates. Copies of "
                   "an object, removing an object and adding another model "
                   "file live here too; what does not fit on a plate can "
                   "spill onto new plates. A 3D view mirrors it for "
@@ -761,6 +803,7 @@ newest saved project for that printer.</p>
 <div class="setting-row">
   <label for="model-path">Full path to the model file</label>
   <input type="text" id="model-path" name="model_path" size="70">
+  {browse_button("model-path", "model", "the model file")}
 </div>
 <button class="primary" formaction="/new-job" id="btn-new-job">Create
 the project and open it</button>
@@ -859,6 +902,7 @@ def render_files(projects_dir, files, msg=None):
 <form method="post" action="/open">
   <label for="path">Full path to a project 3MF file</label>
   <input type="text" id="path" name="path" size="70" required>
+  {browse_button("path", "project", "the project file")}
   <button>Open this file</button>
 </form>
 <p><a href="/">Back to home</a></p>
@@ -1128,11 +1172,14 @@ edit page.</p>
 
 
 def _object_filament_html(session):
-    """The "print this object with filament slot N" control.
+    """The "print this object with filament N" control.
 
-    This is THE answer to "print my model with slot 3" - filament
-    numbers here are the project's filament slots, which become AMS
-    slots after the user syncs AMS in the slicer. Shared by the
+    This is THE answer to "print my model with filament 3" - the
+    numbers are the project's filament list, NOT the AMS slots: the
+    slicer's send window decides which AMS slot feeds each filament
+    (a user's only filament, in AMS Lite slot 3, read as "slot 1"
+    here - 2026-11). They line up only after syncing AMS in the
+    slicer. Shared by the
     Filaments and Printer-and-presets tabs (both forms post the same
     ext__ fields), so the choice is at hand wherever filaments are on
     screen.
@@ -1147,7 +1194,7 @@ def _object_filament_html(session):
         opts = "".join(
             f'<option value="{i + 1}"'
             + (" selected" if str(i + 1) == (o["extruder"] or "") else "")
-            + f">Slot {i + 1} - {esc(names[i] if i < len(names) else '')}"
+            + f">Filament {i + 1} - {esc(names[i] if i < len(names) else '')}"
               "</option>"
             for i in range(max(len(names), len(fmap) or 1))
         )
@@ -1158,9 +1205,14 @@ def _object_filament_html(session):
   <select id="f-ext__{esc(o['id'])}" name="ext__{esc(o['id'])}">{opts}</select>
 </div>""")
     return ("<h3>Which filament prints each object</h3>"
-            "<p class='hint'>Slot numbers match the project's "
-            "filament list - after syncing AMS in the slicer, "
-            "slot 3 here is AMS slot 3.</p>" + "".join(rows))
+            "<p class='hint'>Filament numbers are the project's own "
+            "filament list, not the AMS slots. Which AMS slot feeds "
+            "each filament is chosen in the slicer's send window, "
+            "which matches them by type and colour - a project with "
+            "one filament prints it from whichever slot holds it. "
+            "After syncing AMS in the slicer the list follows the AMS "
+            "order, so filament 3 here is then AMS slot 3.</p>"
+            + "".join(rows))
 
 
 def _number_or_text(value):
@@ -1198,7 +1250,7 @@ def render_filaments_tab(session, msg=None):
             varies = ("" if all(v == block[0] for v in block) else
                       f" (currently varies by nozzle variant: "
                       f"{', '.join(block)})")
-            who = names[i] if i < len(names) else f"slot {i + 1}"
+            who = names[i] if i < len(names) else f"filament {i + 1}"
             fields.append(f"""
 <div class="setting-row">
   <label for="f-{esc(key)}__{i}">{esc(label)} for filament {i + 1} of
@@ -1264,7 +1316,7 @@ reliably respects.</p>
         more_html = f"""
 <h3>All other filament settings ({len(more_keys)})</h3>
 <p class="hint">Everything else about material behaviour. Each opens its
-own edit page with one field per filament slot.</p>
+own edit page with one field per filament.</p>
 <ul class="plain-list">{rows}</ul>"""
 
     flushing_link = ""
@@ -1728,10 +1780,13 @@ def render_placement_tab(session, msg=None):
             if session.orient_is_drop(o["id"]):
                 rot_now += (" Setting it down onto the plate is staged, "
                             "not saved.")
-            elif any(c["kind"] == "orient" and c["objectid"] == o["id"]
-                     for c in session.pending):
-                rot_now += (" An automatic turn (most printable side "
-                            "down) is staged, not saved.")
+            else:
+                turn = next((c for c in session.pending
+                             if c["kind"] == "orient"
+                             and c["objectid"] == o["id"]), None)
+                if turn:
+                    rot_now += (f" A turn ({turn['new']}) is staged, "
+                                "not saved.")
             if staged_scale:
                 size_now = str(staged_scale["new"]).rstrip("%")
                 rot_now += (f" A size change to {staged_scale['new']} "
@@ -1828,6 +1883,16 @@ def render_placement_tab(session, msg=None):
    + esc(o['name']) + " on its plate</button>" if plate else ""}
   <button name="orient" value="{esc(o['id'])}">Auto-orient
   {esc(o['name'])} - turn its most printable side onto the plate</button>
+  <div class="setting-row">
+    <label for="f-lay__{esc(o['id'])}">Or choose yourself which side of
+    {esc(o['name'])} faces down</label>
+    <select id="f-lay__{esc(o['id'])}" name="lay_side__{esc(o['id'])}">
+      {"".join(f'<option value="{esc(k)}">{esc(v)}</option>'
+               for k, v in session.LAY_SIDES.items())}
+    </select>
+    <button name="lay" value="{esc(o['id'])}">Turn {esc(o['name'])} so
+    the chosen side faces down</button>
+  </div>
   <p><a href="/project/object/{esc(o['id'])}">Settings for
   {esc(o['name'])} only - override project settings for just this
   object{_override_count_note(session, o['id'])}</a></p>
@@ -1855,6 +1920,7 @@ def render_placement_tab(session, msg=None):
     the rest of the plate{", spilling onto new plates when it does not fit" if plates_ok else ""}){note}</label>
     <input type="text" id="f-addmodel__{esc(pid)}" name="addmodel__{esc(pid)}"
            value="" size="60">
+    {browse_button(f"f-addmodel__{pid}", "model", "the model file")}
     <button name="add_model" value="{esc(pid)}">Add the model file to
     this plate</button>
   </div>"""
@@ -1909,6 +1975,7 @@ def render_placement_tab(session, msg=None):
 <div class="with-view">
 <div class="view-fields">
 <p>{esc(plate_note)} <a href="#view-panel">Jump to the 3D view.</a></p>
+{_empty_plates_html(session, "/project/placement")}
 <p>{esc(auto_note)}</p>
 <form method="post" action="/project/placement">
   {rows}
@@ -2433,18 +2500,26 @@ file yet. Save them first, then slice.</p>
                 'name="plate" value="0" checked> All plates</label>']
         for p in plates:
             n = len(p["object_ids"])
+            if not n:
+                rows.append(f'<p>Plate {esc(str(p["id"]))} is empty - '
+                            "nothing to slice there.</p>")
+                continue
             rows.append(
                 f'<label class="radio-row"><input type="radio" '
                 f'name="plate" value="{esc(str(p["id"]))}"> Plate '
                 f'{esc(str(p["id"]))} ({n} object'
                 f'{"s" if n != 1 else ""})</label>')
         plate_field = ("<fieldset><legend>Which plate to slice"
-                       "</legend>" + "".join(rows) + "</fieldset>")
+                       "</legend>" + "".join(rows)
+                       + "<p>One plate on its own gives a printable "
+                       "file holding only that plate, so it is the one "
+                       "that gets sent.</p></fieldset>")
     body = f"""
 <h1>Slice and send</h1>
 <p>Your project is saved and verified, with your settings inside the
 file.</p>
 {_preflight_html(warnings)}
+{_empty_plates_html(session, "/project/send")}
 <h2>Slice here in AccessSlice</h2>
 <p>AccessSlice runs {esc(slicer_name)}'s slicing engine invisibly and
 reads the result back to you in words: print time, filament use,
@@ -2730,6 +2805,7 @@ checks the copy. {usb_note}</p>
     <label for="copy-folder">Or a folder to copy to (a drive letter
     such as E: works too)</label>
     <input type="text" id="copy-folder" name="folder" value="">
+    {browse_button("copy-folder", "folder", "the folder")}
   </div>
   <p><button class="primary" id="btn-copy-usb">Copy the file
   there</button></p>
@@ -3668,7 +3744,8 @@ def render_printer_files(ip, path, entries, msg=None):
   <div class="setting-row"><label for="upload-path">Full path of a
   .gcode or .bgcode file on this PC</label>
   <input type="text" id="upload-path" name="file" size="60"
-         autocomplete="off"></div>
+         autocomplete="off">
+  {browse_button("upload-path", "gcode", "the print file")}</div>
   <input type="hidden" name="folder" value="{esc(path)}">
   <label class="radio-row"><input type="checkbox" name="start"
     value="yes"> Start printing it at once (only with an empty plate)</label>

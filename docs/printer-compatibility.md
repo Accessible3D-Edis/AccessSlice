@@ -16,6 +16,8 @@ Bambu printers are NOT controlled by AccessSlice: the Bambu backend hands
 the sliced file to Bambu Studio, whose own send (Ctrl+Shift+G) does the
 network part. Any Bambu printer Studio can send to therefore works for
 sending, but the control, status and files pages do not apply.
+Tested: X1 Carbon, H2C. Reported working by two users (2026-11): A1 mini
+with the AMS Lite.
 
 ## Prusa (PrusaLink) - built in, no extra hardware
 

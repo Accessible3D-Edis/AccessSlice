@@ -60,12 +60,14 @@ class PlateModelTests(TwoPlateCase):
         self.assertAlmostEqual(origin2[0], 412.5)
         self.assertAlmostEqual(origin2[1], 0.0)
 
-    def test_summary_counts_the_plates_with_no_structure_note(self):
+    def test_summary_counts_the_plates_and_names_the_empty_one(self):
         s = self.session()
         self.assertIn("2 build plates - see Placement",
                       " ".join(s.summary()))
-        self.assertEqual([n for n in s.structure_notes if "plate" in n],
-                         [])
+        # The fixture's plate 2 is empty: the only plate note says so.
+        notes = [n for n in s.structure_notes if "plate" in n]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("plate 2 has nothing on it", notes[0])
 
     def test_an_unreadable_layout_is_announced_and_blocks_replating(self):
         entries = engine.load_entries(self.project)
@@ -119,6 +121,99 @@ class ReplateTests(TwoPlateCase):
         obj = fresh.objects()[0]
         self.assertAlmostEqual(obj["x"], 165.0, places=4)
         self.assertAlmostEqual(obj["y"], 160.0, places=4)
+
+
+class EmptyPlateTests(TwoPlateCase):
+    """Removing empty plates (a user's send stopped on one, 2026-11)
+    and the one-plate copy a single-plate slice is made from."""
+
+    def entry_names(self):
+        return set(engine.load_entries(self.project))
+
+    def test_the_empty_plate_is_found(self):
+        self.assertEqual(self.session().empty_plates(), ["2"])
+
+    def test_a_trailing_empty_plate_goes_and_nothing_moves(self):
+        s = self.session()
+        before = s.objects()[0]
+        lines = s.remove_empty_plates()
+        self.assertIn("Removed the empty plate 2", lines[0])
+        fresh = ProjectSession(self.project)
+        self.assertEqual([p["id"] for p in fresh.plates()], ["1"])
+        after = fresh.objects()[0]
+        self.assertAlmostEqual(after["x"], before["x"], places=4)
+        self.assertAlmostEqual(after["y"], before["y"], places=4)
+        self.assertEqual(fresh.empty_plates(), [])
+        self.assertTrue(any("removing empty plates" in b["name"]
+                            for b in fresh.list_backups()),
+                        "the backup is listed on the Backups tab")
+
+    def test_an_empty_first_plate_goes_and_the_next_moves_up(self):
+        s = self.session()
+        s.stage_replate("2", "2")
+        s.save()
+        s = ProjectSession(self.project)
+        self.assertEqual(s.empty_plates(), ["1"])
+        s.remove_empty_plates()
+        fresh = ProjectSession(self.project)
+        plates = fresh.plates()
+        self.assertEqual([p["id"] for p in plates], ["1"])
+        self.assertEqual(plates[0]["object_ids"], ["2"])
+        obj = fresh.objects()[0]
+        # Back at plate 1's place in the grid: the plate centre.
+        self.assertAlmostEqual(obj["x"], 165.0, places=4)
+        self.assertAlmostEqual(obj["y"], 160.0, places=4)
+        # The cover picture the package points at is still there.
+        self.assertIn("Metadata/plate_1.png", self.entry_names())
+
+    def test_refused_while_changes_are_staged(self):
+        s = self.session()
+        s.stage_move("2", 100.0, 100.0)
+        with self.assertRaises(ProjectError):
+            s.remove_empty_plates()
+
+    def test_a_single_plate_project_has_nothing_to_remove(self):
+        project = support.copy_test_project(self.sandbox, name="one.3mf")
+        s = ProjectSession(project)
+        self.assertEqual(s.empty_plates(), [])
+        self.assertIn("no empty plates", s.remove_empty_plates()[0])
+
+    def test_the_send_page_offers_the_removal(self):
+        html = webui.render_send(self.session(), "Bambu Studio", False)
+        self.assertIn("/project/remove-empty-plates", html)
+        self.assertIn("Plate 2 is empty", html)
+        placement = webui.render_placement_tab(self.session())
+        self.assertIn("Remove the empty plates", placement)
+
+    def test_one_plate_copy_holds_only_that_plate(self):
+        import slicer_project
+        s = self.session()
+        s.stage_copy("2", "1")
+        s.save()
+        s = ProjectSession(self.project)
+        first = s.objects()[0]["id"]
+        s.stage_replate(first, "2")
+        s.save()
+        s = ProjectSession(self.project)
+        on_two = next(p for p in s.plates() if p["id"] == "2")["object_ids"]
+        before = s.read_bytes() if hasattr(s, "read_bytes") else             self.project.read_bytes()
+        copy = slicer_project.one_plate_copy(
+            self.project, "2", self.sandbox / "copy.3mf")
+        c = ProjectSession(copy)
+        self.assertEqual([p["id"] for p in c.plates()], ["1"])
+        self.assertEqual(sorted(o["id"] for o in c.objects()),
+                         sorted(on_two))
+        o = c.objects()[0]
+        self.assertTrue(0 <= o["x"] <= 330 and 0 <= o["y"] <= 320,
+                        "the plate moved to the grid's origin")
+        self.assertEqual(self.project.read_bytes(), before,
+                         "the project itself is untouched")
+
+    def test_one_plate_copy_refuses_an_empty_plate(self):
+        import slicer_project
+        with self.assertRaises(ProjectError):
+            slicer_project.one_plate_copy(self.project, "2",
+                                          self.sandbox / "copy.3mf")
 
 
 class PerPlateFilamentMapTests(TwoPlateCase):

@@ -24,11 +24,16 @@ VERIFIED_SERIES and record the evidence in docs/log.md.
 # Version series ("major.minor") whose file formats have been verified
 # against real Studio-written files. 02.08 verified 2026-08-25/27
 # (blind-Benchy H2C project, marshmallow-roller X1C project, conf
-# checksum round trips, first real print sent end to end).
-VERIFIED_SERIES = ("02.08",)
+# checksum round trips, first real print sent end to end). 02.09
+# verified 2026-11-09 with 2.9.1.70: a Studio-saved 9-filament H2C
+# project (24 calendar lids) opened, edited, saved with its changed-
+# settings list and sliced by the 2.9 engine with the edits in the
+# G-code; the conf checksum scheme unchanged; the whole real-engine
+# test set (slicing, project building) green on 2.9.
+VERIFIED_SERIES = ("02.08", "02.09")
 
 # How the verified range reads in user-facing sentences.
-VERIFIED_TEXT = "Bambu Studio 2.8"
+VERIFIED_TEXT = "Bambu Studio 2.8 and 2.9"
 
 
 def series(version_or_app):

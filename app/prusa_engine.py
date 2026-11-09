@@ -91,7 +91,7 @@ class SliceJob(engine_driver.SliceJob):
         # because the base class names the output in its constructor.
         suffix = ".bgcode" if wants_binary(self.project_path) else ".gcode"
         self.out_name = f"{self.project_path.stem}{suffix}"
-        return build_command(self.exe, self.project_path, self.plate,
+        return build_command(self.exe, self.engine_input, self.engine_plate,
                              self.out_name)
 
     def _finish_from_result(self):

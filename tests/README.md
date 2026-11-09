@@ -7,7 +7,7 @@ Run everything from the project root:
 No extra packages are needed - the suite is stdlib-only, like the app.
 The watcher tests genuinely wait for the 1-second polling loop, and
 the real-slicer integration checks run when those slicers are
-installed, so the whole run (700 checks) takes eight to fifteen
+installed, so the whole run (761 checks) takes eight to fifteen
 minutes depending on the machine.
 
 ## What the suite guarantees

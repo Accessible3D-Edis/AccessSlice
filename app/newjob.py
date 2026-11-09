@@ -20,8 +20,17 @@ How it works - the donor-merge design (probed 2026-08-31, log entry):
   version check before writing result.json.
 - A donor stripped to ZERO objects is refused by the engine's parser,
   so the donor keeps its objects through the merge and AccessSlice
-  removes them afterwards (their object ids survive the merge
-  unchanged - verified), leaving only the new model.
+  removes them afterwards, leaving only the new model.
+- The donor's objects are recognised by NAME, never by object id.
+  The engine renumbers objects when it writes the merged file, and
+  the order is not fixed: with some donors the new model comes out
+  as id 2 and the donor's object as id 4 (found 2026-11-09 after a
+  user reported old objects reappearing in new projects - removing
+  the donor's old ids had deleted the new model instead). So a
+  private copy of the donor gets every object renamed to a marker
+  first; names survive the merge, and exactly the marked objects
+  are removed afterwards. A count that does not match stops the
+  build with a plain message instead of opening a wrong project.
 
 So: find a donor project for the chosen printer, merge, remove the
 donor's objects, centre what remains with the app's own arrange, and
@@ -50,6 +59,13 @@ MODEL_SUFFIXES = {".stl", ".step", ".stp", ".obj"}
 # needs about five minutes just to import a 23-million-triangle STL
 # (Skyward Dragon, 2026-09-25), and the old 300 s stopped it.
 MERGE_TIMEOUT_S = 60 * 60
+
+# How often a merge that crashed without any result is run again.
+MERGE_ATTEMPTS = 4
+
+# The name every donor object carries through the merge (see the
+# module notes): unusual enough that no real model is called this.
+DONOR_MARKER = "accessslice-donor-object-"
 
 
 def find_donor(candidates, printer_name):
@@ -129,6 +145,42 @@ def remove_objects(project_path, objectids):
     engine.save_entries(project_path, entries)
 
 
+def mark_objects(project_path):
+    """Rename every object in a project to DONOR_MARKER + its id.
+
+    Works on the object-level name in Metadata/model_settings.config
+    (the name Studio and AccessSlice show); an object without one gets
+    one. Returns how many objects were marked.
+    """
+    entries = engine.load_entries(project_path)
+    ms = entries[engine.MODEL_SETTINGS_ENTRY].decode("utf-8")
+    count = 0
+
+    def mark(block):
+        nonlocal count
+        count += 1
+        text, oid = block.group(0), block.group(1)
+        marked = f'<metadata key="name" value="{DONOR_MARKER}{oid}"/>'
+        head = re.match(r'<object id="[^"]*">', text)
+        body = text[head.end():]
+        # The object's own name comes before its first part; the parts
+        # carry names too, and those stay as they are.
+        first_part = body.find("<part ")
+        own = body if first_part < 0 else body[:first_part]
+        rest = "" if first_part < 0 else body[first_part:]
+        named = re.sub(r'<metadata key="name" value="[^"]*"/>', marked,
+                       own, count=1)
+        if named == own:
+            named = "\n    " + marked + own
+        return head.group(0) + named + rest
+
+    ms = re.sub(r'<object id="([^"]+)">.*?</object>', mark, ms,
+                flags=re.S)
+    entries[engine.MODEL_SETTINGS_ENTRY] = ms.encode("utf-8")
+    engine.save_entries(project_path, entries)
+    return count
+
+
 def create_project(exe, donor_path, model_paths, target_path):
     """Create target_path from the models, on the donor's settings.
 
@@ -138,40 +190,63 @@ def create_project(exe, donor_path, model_paths, target_path):
     donor_path = Path(donor_path)
     target_path = Path(target_path)
     models = [Path(m) for m in model_paths]
-    donor_ids = [o["id"]
-                 for o in ProjectSession(donor_path).objects()]
 
     staging = Path(tempfile.mkdtemp(prefix="accessslice-newjob-"))
     try:
+        # A private, marked copy of the donor: the user's project is
+        # never touched, and its objects are recognisable after the
+        # merge whatever ids the engine gives them.
+        build_job.stage("Preparing the settings of "
+                        f"{donor_path.name}.")
+        marked_donor = staging / "donor.3mf"
+        shutil.copy2(donor_path, marked_donor)
+        donor_count = mark_objects(marked_donor)
+
         out_name = "new-project.3mf"
-        cmd = build_merge_command(exe, donor_path, models, out_name)
-        build_job.stage("The slicer's engine is reading the model and "
-                        "building the project.")
-        try:
-            build_job.run(cmd, cwd=str(staging), timeout=MERGE_TIMEOUT_S,
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL,
-                          stdin=subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
+        cmd = build_merge_command(exe, marked_donor, models, out_name)
+        result = None
+        for attempt in range(1, MERGE_ATTEMPTS + 1):
+            build_job.stage(
+                "The slicer's engine is reading the model and building "
+                "the project." if attempt == 1 else
+                "The slicer's engine stopped unexpectedly, which it "
+                f"sometimes does; trying again (attempt {attempt} of "
+                f"{MERGE_ATTEMPTS}).")
+            for leftover in (out_name, "result.json"):
+                (staging / leftover).unlink(missing_ok=True)
+            try:
+                build_job.run(cmd, cwd=str(staging),
+                              timeout=MERGE_TIMEOUT_S,
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
+                              stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired:
+                raise ProjectError(
+                    "The slicer engine was still building the project "
+                    f"after {MERGE_TIMEOUT_S // 60} minutes and was "
+                    "stopped. Try again, or use the guided way further "
+                    "down the Start page.")
+            except OSError as e:
+                raise ProjectError(
+                    f"The slicer engine could not be started ({e}). "
+                    "Check the slicer path on the Settings page.")
+            # The exe is a GUI-subsystem binary: result.json is the
+            # truth. None at all means the engine crashed before its
+            # end (0xC0000409, about one merge in four on Studio 2.9 -
+            # measured 2026-11-09); the very same command then works,
+            # so it is simply run again.
+            try:
+                result = json.loads((staging / "result.json")
+                                    .read_text(encoding="utf-8"))
+                break
+            except (OSError, ValueError):
+                result = None
+        if result is None:
             raise ProjectError(
-                "The slicer engine was still building the project after "
-                f"{MERGE_TIMEOUT_S // 60} minutes and was stopped. Try "
-                "again, or use the guided way further down the Start "
-                "page.")
-        except OSError as e:
-            raise ProjectError(
-                f"The slicer engine could not be started ({e}). Check "
-                "the slicer path on the Settings page.")
-        # The exe is a GUI-subsystem binary: result.json is the truth.
-        try:
-            result = json.loads((staging / "result.json")
-                                .read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            raise ProjectError(
-                "The slicer engine ended without writing its result "
-                "file while building the project, so the outcome is "
-                "unknown. Try again, or use the guided way further "
-                "down the Start page.")
+                "The slicer engine stopped unexpectedly "
+                f"{MERGE_ATTEMPTS} times in a row while building the "
+                "project, without saying why. Try again, or use the "
+                "guided way further down the Start page.")
         if result.get("return_code") != 0:
             raise ProjectError(
                 "The slicer engine could not build the project. Its "
@@ -184,6 +259,17 @@ def create_project(exe, donor_path, model_paths, target_path):
                 "further down the Start page.")
 
         build_job.stage("Checking the built project.")
+        donor_ids = [o["id"] for o in ProjectSession(made).objects()
+                     if o["name"].startswith(DONOR_MARKER)]
+        if len(donor_ids) != donor_count:
+            raise ProjectError(
+                "The slicer engine changed the old project's objects "
+                f"while building ({donor_count} went in, "
+                f"{len(donor_ids)} came out recognisable), so "
+                "AccessSlice cannot tell them apart from your model "
+                "and stopped rather than open a mixed project. Use "
+                "the guided way further down the Start page for this "
+                "model, and please report it.")
         remove_objects(made, donor_ids)
 
         # Prove the result opens before it reaches the projects folder.

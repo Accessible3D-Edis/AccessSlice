@@ -146,6 +146,53 @@
     setTimeout(function () { status.textContent = text; }, 250);
   }
 
+  /* ------------------------------------------- Browse buttons */
+
+  // Each path field's Browse button opens Windows' own Open dialog
+  // (the server shows it - POST /browse) and puts the chosen path in
+  // the field; focus then goes back to the field and the status line
+  // says what was chosen. Without script the buttons stay hidden and
+  // the fields take a typed or pasted path as always (two users asked
+  // for a browse button, 2026-11).
+  var say = function (text) {
+    if (!status) return;
+    status.textContent = "";
+    setTimeout(function () { status.textContent = text; }, 100);
+  };
+  Array.prototype.forEach.call(
+    document.querySelectorAll("button[data-browse-for]"),
+    function (button) {
+      var field = document.getElementById(
+        button.getAttribute("data-browse-for"));
+      if (!field) return;
+      button.hidden = false;
+      button.addEventListener("click", function () {
+        var body = new URLSearchParams();
+        body.set("kind", button.getAttribute("data-browse-kind") || "");
+        body.set("current", field.value || "");
+        say("The Open dialog is opening.");
+        fetch("/browse", { method: "POST", body: body })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.path) {
+              field.value = data.path;
+              field.dispatchEvent(new Event("change", { bubbles: true }));
+              field.focus();
+              say("Chosen: " + data.path);
+            } else {
+              button.focus();
+              say(data.problem
+                  || "Nothing was chosen - the field is unchanged.");
+            }
+          })
+          .catch(function () {
+            button.focus();
+            say("Lost contact with AccessSlice - type the path into "
+                + "the field instead.");
+          });
+      });
+    });
+
   /* ------------------------------------------- settings: slicer */
 
   // Choosing another slicer swaps the program path field to THAT

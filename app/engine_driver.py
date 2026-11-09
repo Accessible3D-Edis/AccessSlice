@@ -62,10 +62,21 @@ class SliceJob:
     failures - the engine's own error_string lives there).
     """
 
-    def __init__(self, exe, project_path, plate=0, on_finish=None):
+    def __init__(self, exe, project_path, plate=0, on_finish=None,
+                 engine_input=None, engine_plate=None):
+        """engine_input / engine_plate: the file and plate the engine
+        actually slices, when that is not the project itself - a
+        one-plate copy of a multi-plate project (sliced as its plate
+        1). The output is still named and filed after the project, and
+        plate stays the number the user chose. A given engine_input is
+        temporary: its folder is deleted when the job ends."""
         self.exe = str(exe)
         self.project_path = Path(project_path)
         self.plate = int(plate)
+        self.engine_input = Path(engine_input or project_path)
+        self.engine_plate = (self.plate if engine_plate is None
+                             else int(engine_plate))
+        self._temporary_input = engine_input is not None
         self.status = "running"
         self.report = None
         self._on_finish = on_finish
@@ -134,8 +145,8 @@ class SliceJob:
         """The CLI invocation. Reaches the module function at call
         time so tests' monkeypatching of build_command keeps working;
         another engine's SliceJob subclass overrides this."""
-        return build_command(self.exe, self.project_path, self.plate,
-                             self.out_name)
+        return build_command(self.exe, self.engine_input,
+                             self.engine_plate, self.out_name)
 
     def _run(self):
         try:
@@ -198,6 +209,8 @@ class SliceJob:
     def _finish(self, status, report):
         self._elapsed_final = int(time.monotonic() - self._t0)
         self.report = report
+        if self._temporary_input:
+            shutil.rmtree(self.engine_input.parent, ignore_errors=True)
         self.status = status
         prune_runs(self.project_path)
         if self._on_finish:

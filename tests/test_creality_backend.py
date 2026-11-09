@@ -41,10 +41,9 @@ class TestBackendSurface(unittest.TestCase):
         self.assertEqual(len(session.objects()), 1)
         self.assertIn("Creality K2 Plus 0.4 nozzle",
                       " ".join(session.summary()))
-        # 7.2 is the verified series - no version caution, only the
-        # honest note about the absent changed-settings bookkeeping.
-        self.assertEqual(len(session.structure_notes), 1)
-        self.assertIn("bookkeeping", session.structure_notes[0])
+        # 7.2 is the verified series - no version caution, and an
+        # absent changed-settings list is normal (nothing changed).
+        self.assertEqual(session.structure_notes, [])
 
     def test_preset_lists_filter_by_model(self):
         sandbox = support.make_sandbox()

@@ -31,6 +31,9 @@ class UnverifiedNoteTests(unittest.TestCase):
         self.assertIsNone(compat.unverified_note("02.08.02.61", "X"))
         self.assertIsNone(
             compat.unverified_note("BambuStudio-02.08.99.99", "X"))
+        # 2.9 verified 2026-11-09 (docs/log.md).
+        self.assertIsNone(
+            compat.unverified_note("BambuStudio-02.09.01.70", "X"))
 
     def test_unverified_versions_get_a_caution_not_a_refusal(self):
         note = compat.unverified_note("BambuStudio-03.00.00.01",

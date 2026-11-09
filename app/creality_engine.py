@@ -44,7 +44,7 @@ class SliceJob(engine_driver.SliceJob):
     """The proven job runner with Creality's outcome judgement."""
 
     def _build_command(self):
-        return build_command(self.exe, self.project_path, self.plate,
+        return build_command(self.exe, self.engine_input, self.engine_plate,
                              self.out_name)
 
     def _finish_from_result(self):

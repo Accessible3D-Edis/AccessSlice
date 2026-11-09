@@ -281,6 +281,7 @@ class BambuObjectOps(unittest.TestCase):
 
     def test_add_model_imports_the_engines_object_and_cleans_up(self):
         merged = support.copy_test_project(self.sandbox, name="merged.3mf")
+        newjob.mark_objects(merged)
         support.add_duplicate_object(merged)
         script = support.make_fake_merge(self.sandbox)
         model = self.sandbox / "second-model.stl"
@@ -513,6 +514,7 @@ class PlacementRoutes(unittest.TestCase):
 
     def test_add_model_over_http_through_the_fake_merge(self):
         merged = support.copy_test_project(F.sandbox, name="merged-http.3mf")
+        newjob.mark_objects(merged)
         support.add_duplicate_object(merged)
         script = support.make_fake_merge(F.sandbox)
         model = F.sandbox / "second-model.stl"

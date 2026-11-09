@@ -674,6 +674,19 @@ def add_duplicate_object(project_path, new_id="102",
     return orig_id
 
 
+def rename_object(project_path, objectid, new_name):
+    """Give one object (not its parts) a new name in model_settings."""
+    import re
+    import edit_bambu_3mf as engine
+    entries = engine.load_entries(project_path)
+    ms = entries[engine.MODEL_SETTINGS_ENTRY].decode("utf-8")
+    ms = re.sub(r'(<object id="' + re.escape(str(objectid))
+                + r'">\s*<metadata key="name" value=")[^"]*(")',
+                lambda m: m.group(1) + new_name + m.group(2), ms, count=1)
+    entries[engine.MODEL_SETTINGS_ENTRY] = ms.encode("utf-8")
+    engine.save_entries(project_path, entries)
+
+
 # A stand-in for the engine's merge-export (newjob.build_merge_command
 # is patched to run it): copies a prepared "merged" fixture into place
 # and writes result.json, honouring the real contract.
@@ -688,6 +701,15 @@ if behaviour == "fail":
                                "not found."},
               open("result.json", "w"))
     sys.exit(0)
+# A crash like Studio's 0xC0000409: no result.json, no project. "crash"
+# always, "crash-once" only on the first run in this folder.
+if behaviour == "crash":
+    sys.exit(3)
+if behaviour == "crash-once":
+    import os
+    if not os.path.exists("crashed-once"):
+        open("crashed-once", "w").close()
+        sys.exit(3)
 shutil.copy2(fixture, out_name)
 json.dump({"return_code": 0, "error_string": "Success."},
           open("result.json", "w"))

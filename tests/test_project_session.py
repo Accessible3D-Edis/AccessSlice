@@ -477,7 +477,10 @@ class StructureCheckTests(SessionCase):
         support.add_empty_plate(self.project, "2")
         s = self.session()
         self.assertIn("2 build plates", " ".join(s.summary()))
-        self.assertEqual([n for n in s.structure_notes if "plate" in n],
+        # A readable multi-plate layout is normal, not a warning; the
+        # one plate note is that the fixture's added plate is empty.
+        self.assertEqual([n for n in s.structure_notes
+                          if "plate" in n and "nothing on it" not in n],
                          [], "a readable multi-plate layout is normal "
                              "now, not a warning")
 
@@ -523,14 +526,27 @@ class StructureCheckTests(SessionCase):
         notes = " ".join(s.structure_notes)
         self.assertIn("preset library was not found", notes)
 
-    def test_missing_diff_bookkeeping_is_announced(self):
+    def _set_bookkeeping(self, value):
         import json as _json
         entries = engine.load_entries(self.project)
         settings = _json.loads(entries[engine.PROJECT_SETTINGS_ENTRY])
-        del settings["different_settings_to_system"]
+        if value is None:
+            del settings["different_settings_to_system"]
+        else:
+            settings["different_settings_to_system"] = value
         entries[engine.PROJECT_SETTINGS_ENTRY] = _json.dumps(
             settings).encode("utf-8")
         engine.save_entries(self.project, entries)
+
+    def test_absent_diff_bookkeeping_is_normal(self):
+        # Studio writes no list at all when nothing differs from the
+        # presets (2.8 cane specimen, 2.9 calendar lids) - no note.
+        self._set_bookkeeping(None)
+        notes = " ".join(self.session().structure_notes)
+        self.assertNotIn("bookkeeping", notes)
+
+    def test_malformed_diff_bookkeeping_is_announced(self):
+        self._set_bookkeeping("not a list")
         notes = " ".join(self.session().structure_notes)
         self.assertIn("bookkeeping", notes)
 

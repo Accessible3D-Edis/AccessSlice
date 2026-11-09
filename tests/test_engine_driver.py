@@ -64,6 +64,32 @@ class DriverTests(unittest.TestCase):
         self.assertTrue((job.out_dir / engine_driver.CLI_LOG_NAME)
                         .is_file())
 
+    def test_a_one_plate_copy_is_what_the_engine_gets(self):
+        # A single plate of a multi-plate project is sliced from a
+        # temporary one-plate copy (as its plate 1); the output is still
+        # filed after the project, and the copy's folder is cleaned up.
+        seen = {}
+
+        def build(exe, project_path, plate, out_name):
+            seen["path"], seen["plate"] = project_path, plate
+            return [sys.executable, str(self.script), out_name, "success"]
+        engine_driver.build_command = build
+        folder = self.sandbox / "one-plate"
+        folder.mkdir()
+        copy = folder / self.project.name
+        shutil.copy2(self.project, copy)
+        job = engine_driver.SliceJob("fake.exe", self.project, plate=3,
+                                     engine_input=copy, engine_plate=1)
+        job.wait(30)
+        self.assertEqual(job.status, "done")
+        self.assertEqual((str(seen["path"]), seen["plate"]),
+                         (str(copy), 1))
+        self.assertEqual(job.plate, 3, "the user's plate number stays")
+        self.assertEqual(job.out_dir.parent,
+                         self.project.parent / "sliced")
+        self.assertFalse(folder.exists(), "the temporary copy is gone")
+        self.assertTrue(self.project.is_file(), "the project stays")
+
     def test_failure_quotes_the_engines_own_message(self):
         job = self._job("fail")
         job.wait(30)

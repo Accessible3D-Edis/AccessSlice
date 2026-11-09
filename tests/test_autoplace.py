@@ -119,6 +119,22 @@ class DownDirectionTests(unittest.TestCase):
         self.assertAlmostEqual(bb[5] - bb[2], 20.0, places=4)
 
 
+class LargestFlatSideTests(unittest.TestCase):
+    """The person's own choice: the largest flat side down, no overhang
+    judgement (a user could not get an image relief flipped, 2026-11)."""
+
+    def test_the_biggest_face_of_a_slab_is_found(self):
+        # A 40 x 30 slab, 3 thick, standing on its narrow edge: the
+        # biggest faces point along y.
+        verts, tris = box_mesh(40, 3, 30)
+        d = geometry.largest_flat_direction(verts, tris)
+        self.assertAlmostEqual(abs(d[1]), 1.0, places=6)
+
+    def test_no_area_means_no_direction(self):
+        self.assertIsNone(geometry.largest_flat_direction(
+            [(0, 0, 0)] * 3, [(0, 1, 2)]))
+
+
 class ArrangeRectsTests(unittest.TestCase):
 
     def overlap_free(self, sizes, spots, gap):
@@ -262,8 +278,8 @@ class AutoOrientTests(ProjectCase):
                                (before[1] + before[4]) / 2, places=6)
         # A stable flat lie, not the tipped-over one it started in.
         html = webui.render_placement_tab(s)
-        self.assertIn("An automatic turn (most printable side "
-                      "down) is staged, not saved.", html)
+        self.assertIn("A turn (most printable side down) is "
+                      "staged, not saved.", html)
         s.save()
         fresh = ProjectSession(self.project)
         bb = world_bbox(fresh, "2")
@@ -275,6 +291,44 @@ class AutoOrientTests(ProjectCase):
         self.assertFalse(s.stage_orient("2"))
         self.assertFalse(s.stage_orient("2"))
         self.assertEqual(s.pending, [])
+
+
+class ChosenSideDownTests(ProjectCase):
+
+    def test_upside_down_rests_on_the_plate_with_the_same_height(self):
+        s = ProjectSession(self.project)
+        before = world_bbox(s, "2")
+        self.assertTrue(s.stage_orient("2", side="top"))
+        self.assertEqual(s.pending[0]["new"],
+                         "former top (upside down) facing the plate")
+        s.save()
+        s = ProjectSession(self.project)
+        after = world_bbox(s, "2")
+        self.assertAlmostEqual(after[2], 0.0, places=4)
+        self.assertAlmostEqual(after[5] - after[2],
+                               before[5] - before[2], places=3)
+
+    def test_every_side_turns_and_lands_on_the_plate(self):
+        for side in ProjectSession.LAY_SIDES:
+            s = ProjectSession(self.project)
+            changed = s.stage_orient("2", side=side)
+            if not changed:
+                continue
+            s.save()
+            s = ProjectSession(self.project)
+            self.assertAlmostEqual(world_bbox(s, "2")[2], 0.0, places=4,
+                                   msg=side)
+            s.restore_backup(s.list_backups()[0]["name"])
+
+    def test_an_unknown_side_is_refused(self):
+        with self.assertRaises(ProjectError):
+            ProjectSession(self.project).stage_orient("2", side="under")
+
+    def test_the_placement_tab_offers_the_choice(self):
+        html = webui.render_placement_tab(ProjectSession(self.project))
+        self.assertIn('name="lay_side__2"', html)
+        self.assertIn("its largest flat side", html)
+        self.assertIn('name="lay" value="2"', html)
 
 
 class ScaleKeepsTheBottomTests(ProjectCase):
@@ -441,6 +495,16 @@ class AutoPlacementHttpTests(unittest.TestCase):
         self.assertIn("already lies well", msg)
         # And nothing was staged by either command.
         self.assertEqual(server.state["session"].pending, [])
+        # The chosen side: turning it upside down is staged, the other
+        # fields of the form are ignored like for every command button.
+        status, loc = self.post("/project/placement",
+                                {"lay": "2", "lay_side__2": "top",
+                                 "x__2": "1"})
+        msg = urllib.parse.unquote(loc.split("msg=", 1)[1])
+        self.assertIn("former top (upside down) facing the plate", msg)
+        kinds = [c["kind"] for c in server.state["session"].pending]
+        self.assertEqual(kinds, ["orient"])
+        server.state["session"].pending = []
 
 
 if __name__ == "__main__":

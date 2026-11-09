@@ -226,12 +226,27 @@ class ProjectSession:
                 "filament-to-nozzle map yet. Saving a mapping from the "
                 "Filaments tab will create it.")
 
-        if not isinstance(self.settings.get("different_settings_to_system"),
-                          list):
+        # Studio leaves the changed-settings list out entirely when no
+        # setting differs from the presets (2.8 and 2.9 alike - the
+        # cane specimen and the 2.9 calendar lids, checked 2026-11-09),
+        # so only a list that is there but malformed is worth a word.
+        bookkeeping = self.settings.get("different_settings_to_system")
+        if bookkeeping is not None and not isinstance(bookkeeping, list):
             notes.append(
                 "Project note: the file's changed-settings bookkeeping "
-                "is missing; AccessSlice will rebuild it on the first "
+                "is unreadable; AccessSlice will rebuild it on the first "
                 "save.")
+
+        empty = self.empty_plates()
+        if empty:
+            notes.append(
+                "Project note: "
+                + (f"plate {empty[0]} has" if len(empty) == 1 else
+                   "plates " + ", ".join(empty) + " have")
+                + " nothing on " + ("it" if len(empty) == 1 else "them")
+                + ". Remove the empty plates on the Placement tab "
+                "before sending, or the slicer's send can land on an "
+                "empty plate.")
 
         # The Filaments tab writes whole per-filament blocks; a list
         # whose length does not divide among the filaments would be
@@ -878,7 +893,29 @@ class ProjectSession:
              "label": f"Size of {objs[objectid]['name']}"})
         return True
 
-    def stage_orient(self, objectid):
+    # The sides a person can ask to have facing down (stage_orient's
+    # side=), in the words the Placement tab uses. Directions are in
+    # the plate's frame as the object lies NOW: front is toward the
+    # front edge of the plate (Y 0), top is straight up.
+    LAY_SIDES = {
+        "largest": "its largest flat side",
+        "top": "its current top - turns it upside down",
+        "front": "its current front",
+        "back": "its current back",
+        "left": "its current left side",
+        "right": "its current right side",
+    }
+    # How a staged turn reads on Review ("... facing the plate").
+    SIDE_RESULT = {
+        "largest": "largest flat side", "top": "former top (upside down)",
+        "front": "former front", "back": "former back",
+        "left": "former left side", "right": "former right side",
+    }
+    _SIDE_VECTORS = {"top": (0.0, 0.0, 1.0), "front": (0.0, -1.0, 0.0),
+                     "back": (0.0, 1.0, 0.0), "left": (-1.0, 0.0, 0.0),
+                     "right": (1.0, 0.0, 0.0)}
+
+    def stage_orient(self, objectid, side=None):
         """Stage turning an object so its most printable side lies on
         the plate: the biggest flat area goes down unless that costs
         too much unsupported overhang (the same trade every slicer's
@@ -890,7 +927,15 @@ class ProjectSession:
         Since 2026-09-02 an object that already lies well but floats
         above or sinks into the plate is dropped onto it instead
         (staged with drop_only = True, so the messages can say so) -
-        the pre-flight floating/sunk warning points here."""
+        the pre-flight floating/sunk warning points here.
+
+        side: one of LAY_SIDES - the person's own choice of what faces
+        down instead of the automatic judgement ("the largest side
+        down", asked for by a user who could not get an image relief
+        flipped, 2026-11). "largest" is the biggest flat area with no
+        overhang trade-off."""
+        if side is not None and side not in self.LAY_SIDES:
+            raise ProjectError(f"Unknown side {side!r}.")
         objs = {o["id"]: o for o in self.objects()}
         if objectid not in objs:
             raise ProjectError(f"No object with id {objectid}.")
@@ -910,7 +955,13 @@ class ProjectSession:
         verts, tris = shape
         m, t = eff[0:9], eff[9:12]
         oriented = [geometry.rotate_point(m, v) for v in verts]
-        down = geometry.best_down_direction(oriented, tris)
+        if side is None:
+            down = geometry.best_down_direction(oriented, tris)
+        else:
+            down = (geometry.largest_flat_direction(oriented, tris)
+                    if side == "largest" else self._SIDE_VECTORS[side])
+            if down is not None and down[2] < -0.999:
+                down = None   # that side already faces down
         if down is None:
             bottom = geometry.bbox(oriented)[2] + t[2]
             if abs(bottom) > 0.05:
@@ -944,7 +995,10 @@ class ProjectSession:
         self._replace_pending(
             lambda c: c["kind"] == "orient" and c["objectid"] == objectid,
             {"kind": "orient", "objectid": objectid, "nums": new_nums,
-             "old": "as it lies now", "new": "most printable side down",
+             "old": "as it lies now",
+             "new": ("most printable side down" if side is None
+                     else self.SIDE_RESULT[side] + " facing the plate"),
+             "side": side,
              "label": f"Lying direction of {name}"})
         return True
 
@@ -1865,7 +1919,7 @@ class ProjectSession:
     # "blind-benchy - before save 2026-08-27 14.32.05.3mf". Dots in the
     # time because Windows filenames cannot contain colons.
     _BACKUP_STAMP_RE = re.compile(
-        r" - before (save|restore) "
+        r" - before (save|restore|removing empty plates) "
         r"(\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2})(?: \((\d+)\))?\.3mf$")
 
     def backup_dir(self):
@@ -2086,6 +2140,168 @@ class ProjectSession:
             f"The previous version is kept in the backups folder as "
             f"{backup.name} - see the Backups tab.",
         ]
+
+    # ------------------------------------------------ empty plates
+
+    # The per-plate files Studio keeps in Metadata/ (thumbnails, the
+    # plate's bounding-box summary, a sliced plate's G-code).
+    _PLATE_FILE_RE = re.compile(
+        r"^(Metadata/(?:plate_no_light_|plate_|top_|pick_))(\d+)"
+        r"((?:_small)?\.(?:png|json|gcode(?:\.md5)?))$")
+
+    def empty_plates(self):
+        """Ids of the plates with nothing on them (never the only one).
+
+        A plate without objects gives Bambu Studio nothing to slice,
+        and when it is the plate Studio shows first, its Slice and Send
+        keys act on that empty plate and the job cannot be sent
+        (reported by a user, 2026-11: an image's watermark had landed
+        on a plate of its own and was then removed)."""
+        if not self.supports_plates:
+            return []
+        plates = self.plates()
+        if len(plates) <= 1:
+            return []
+        empty = [p["id"] for p in plates if not p["object_ids"]]
+        if len(empty) == len(plates):
+            empty = empty[1:]     # a project always keeps one plate
+        return empty
+
+    def remove_empty_plates(self, keep_backup=True):
+        """Delete the empty plates and close the gaps, written at once.
+
+        The plates after a removed one move up a place: their ids are
+        renumbered from 1 (thumbnails and per-plate files follow), and
+        their objects move with them to where Studio lays that place
+        out in the smaller grid. Not a staged change - it is refused
+        while changes are staged, so the two never interact. The file
+        is backed up, written and verified exactly like a save.
+        Returns plain-language result lines.
+        """
+        empty = self.empty_plates()
+        if not empty:
+            return ["There are no empty plates to remove."]
+        if self.pending:
+            raise ProjectError(
+                "Save or discard the staged changes first (Review "
+                "tab), then remove the empty plates.")
+        self._ensure_fresh("removing the empty plates")
+        plates = self.plates()
+        if [p["id"] for p in plates] != [str(i) for i in
+                                         range(1, len(plates) + 1)]:
+            raise ProjectError(
+                "The plates in this file are not numbered 1, 2, 3 and "
+                "so on, so AccessSlice leaves them alone. Delete the "
+                "empty plate in the slicer instead.")
+        kept = [p for p in plates if p["id"] not in empty]
+        stride = self.plate_grid()["stride"]
+        count = len(kept)
+        cols = max(1, math.ceil(math.sqrt(count)))
+
+        model_xml = self.model_xml
+        for index, plate in enumerate(kept):
+            members = set(plate["object_ids"])
+            if not members:
+                continue
+            old = self.plate_origin(plate["id"])
+            if old is None:
+                raise ProjectError(
+                    "The plate layout of this project could not be read "
+                    "reliably, so AccessSlice cannot move the plates "
+                    "after the empty one. Delete the empty plate in "
+                    "the slicer instead.")
+            new = ((index % cols) * stride, -(index // cols) * stride)
+            dx, dy = new[0] - old[0], new[1] - old[1]
+            if dx or dy:
+                for oid in members:
+                    model_xml = object_ops.shift_item(model_xml, oid,
+                                                      dx, dy)
+
+        renumber = {p["id"]: str(i + 1) for i, p in enumerate(kept)}
+        ms_xml = self.ms_xml
+        blocks = list(re.finditer(r"[ \t]*<plate>.*?</plate>[ \t]*\n?",
+                                  ms_xml, re.S))
+        for m in reversed(blocks):
+            pid = re.search(r'key="plater_id" value="([^"]*)"', m.group(0))
+            old_id = pid.group(1) if pid else ""
+            if old_id not in renumber:
+                ms_xml = ms_xml[:m.start()] + ms_xml[m.end():]
+                continue
+            new_id = renumber[old_id]
+            block = m.group(0).replace(
+                f'key="plater_id" value="{old_id}"',
+                f'key="plater_id" value="{new_id}"')
+            block = re.sub(
+                r'(value="Metadata/(?:plate_no_light_|plate_|top_|pick_))'
+                + re.escape(old_id) + r'((?:_small)?\.(?:png|json))"',
+                lambda x: x.group(1) + new_id + x.group(2) + '"', block)
+            ms_xml = ms_xml[:m.start()] + block + ms_xml[m.end():]
+
+        entries = dict(self.entries)
+        entries[engine.MODEL_ENTRY] = model_xml.encode("utf-8")
+        entries[engine.MODEL_SETTINGS_ENTRY] = ms_xml.encode("utf-8")
+        # Per-plate files: the removed plates' go, the rest follow their
+        # plate's new number (ascending, so a slot is always free).
+        moves, dropped = [], {}
+        for name in list(entries):
+            hit = self._PLATE_FILE_RE.match(name)
+            if not hit:
+                continue
+            if hit.group(2) not in renumber:
+                dropped[name] = entries.pop(name)
+            elif renumber[hit.group(2)] != hit.group(2):
+                moves.append((int(hit.group(2)), name, hit))
+        for _num, name, hit in sorted(moves):
+            data = entries.pop(name)
+            entries[hit.group(1) + renumber[hit.group(2)]
+                    + hit.group(3)] = data
+        # The project's cover picture (_rels/.rels points at plate 1's
+        # thumbnail): when no remaining plate brings one, the old
+        # picture stays rather than leave the link pointing at nothing.
+        # The slicer redraws thumbnails on its next save anyway.
+        rels = entries.get("_rels/.rels", b"").decode("utf-8", "replace")
+        for target in re.findall(r'Target="/?([^"]+)"', rels):
+            if target not in entries and target in dropped:
+                entries[target] = dropped[target]
+        seq_name = "Metadata/filament_sequence.json"
+        if seq_name in entries:
+            try:
+                seq = json.loads(entries[seq_name])
+                seq = {("plate_" + renumber[k[6:]]): v
+                       for k, v in seq.items()
+                       if k.startswith("plate_") and k[6:] in renumber}
+                entries[seq_name] = json.dumps(seq).encode("utf-8")
+            except (ValueError, AttributeError):
+                del entries[seq_name]
+
+        backup = self._write_backup("removing empty plates") \
+            if keep_backup else None
+        try:
+            engine.save_entries(self.path, entries)
+        except OSError as e:
+            if backup:
+                shutil.copy2(backup, self.path)
+            raise ProjectError(
+                f"The project file could not be written ({e}). If it is "
+                "open in the slicer, close it there and try again. "
+                "Nothing was changed.")
+        problems = engine.verify(self.path, list(entries.keys()))
+        if problems:
+            if backup:
+                shutil.copy2(backup, self.path)
+            raise ProjectError(
+                "Verification failed, so the original file was restored "
+                "untouched. Problems: " + "; ".join(problems))
+        self._load()
+        removed = ", ".join(empty)
+        plural = "s" if len(empty) != 1 else ""
+        lines = [f"Removed the empty plate{plural} {removed}. The project "
+                 f"now has {count} plate{'s' if count != 1 else ''}"
+                 + (", numbered again from 1." if count > 1 else ".")]
+        if backup:
+            lines.append(f"The previous version is kept in the backups "
+                         f"folder as {backup.name}.")
+        return lines
 
     # ------------------------------------- preset-diff bookkeeping helpers
 
@@ -2367,3 +2583,34 @@ class ProjectSession:
         return model_xml, (ms_xml[:tm.end(1)]
                            + "  " + block_text + "\n  "
                            + ms_xml[tm.end(1):])
+
+
+def one_plate_copy(project_path, plate_id, target_path):
+    """A copy of a multi-plate project holding only one plate.
+
+    The objects of every other plate are removed, the plates left empty
+    by that are removed (remove_empty_plates), so the chosen plate
+    becomes plate 1 at the grid's origin. Slicing this copy gives a
+    printable file with that plate alone: when it is opened in Bambu
+    Studio to send, there is no other plate its Slice and Send keys
+    could land on (a user's empty plate stopped her send, 2026-11).
+    The project itself is never touched. Returns target_path.
+    """
+    import newjob  # imports this module - fetched at call time
+    target_path = Path(target_path)
+    shutil.copy2(project_path, target_path)
+    session = ProjectSession(target_path)
+    plate = next((p for p in session.plates() if p["id"] == str(plate_id)),
+                 None)
+    if plate is None:
+        raise ProjectError(f"No plate {plate_id} in this project.")
+    if not plate["object_ids"]:
+        raise ProjectError(
+            f"Plate {plate_id} has nothing on it, so there is nothing "
+            "to slice there.")
+    keep = set(plate["object_ids"])
+    others = [o["id"] for o in session.objects() if o["id"] not in keep]
+    if others:
+        newjob.remove_objects(target_path, others)
+    ProjectSession(target_path).remove_empty_plates(keep_backup=False)
+    return target_path

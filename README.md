@@ -68,6 +68,14 @@ a new job to the finished part:
 - **Prusa Core One**, with PrusaSlicer
 - **Creality K2 Plus**, with Creality Print
 
+### Confirmed by users
+
+These printers have not been tested by the developer, but AccessSlice
+users have printed with them and reported that it works:
+
+- **Bambu Lab A1 mini**, with Bambu Studio (reported by two users,
+  November 2026, including the AMS Lite)
+
 ### Expected to work, not tested yet
 
 These use the same slicer and talk to the printer the same way as a
@@ -76,7 +84,7 @@ do, please report how it went (see "Reporting a problem or a new
 printer").
 
 - **Other Bambu Lab printers** that Bambu Studio can send to (P1S,
-  P1P, A1, A1 mini, X1E, H2D and others). Sending goes through Bambu
+  P1P, A1, X1E, H2D and others). Sending goes through Bambu
   Studio, so anything Bambu Studio can print to should work.
 - **Other Prusa printers with PrusaLink**: Core One L, MK4 and MK4S,
   MK3.9 and MK3.5, XL, and the MINI with Prusa's network module or a
@@ -121,7 +129,7 @@ AccessSlice never needs the internet.
 1. Open the **Releases** page of this project on GitHub:
    https://github.com/Accessible3D-Edis/AccessSlice/releases
 2. Under the newest release, download `AccessSlice-Setup-<version>.exe`
-   (for example `AccessSlice-Setup-1.0.1.exe`).
+   (for example `AccessSlice-Setup-1.1.0.exe`).
 3. Run the downloaded file. The installer is a standard Windows
    installer and reads well with a screen reader. Press Next through
    its pages; the defaults are right for almost everyone.
@@ -260,7 +268,10 @@ is needed once; AccessSlice does the rest from then on.
 ## A print job, step by step
 
 1. **Start a new print job** on the Home page. Choose the printer and
-   give the path of your model file (an STL, STEP or OBJ).
+   give the path of your model file (an STL, STEP or OBJ): type or
+   paste it, or press **Browse for the model file** next to the field
+   to pick it in the ordinary Windows Open dialog. Every path field in
+   AccessSlice has such a Browse button.
    AccessSlice builds the project itself, on the settings of your
    newest saved project for that printer, and opens it. A large model
    can take a while; the building page tells you the stage and the
@@ -285,10 +296,24 @@ is needed once; AccessSlice does the rest from then on.
    and **Save** writes them all, with a backup of the file you started
    from.
 
+   On **Placement**, each object has **Auto-orient** (the most
+   printable side down) and a choice of which side faces down
+   yourself: its largest flat side, its current top (turns it upside
+   down), front, back, left or right. Plates with nothing on them are
+   named, with a **Remove the empty plates** button - an empty plate
+   can stop the slicer's send.
+
+   On **Filaments**, the numbers are the project's own filament list,
+   not the AMS slots. Which AMS slot feeds each filament is chosen in
+   the slicer's send window; a project with one filament prints it
+   from whichever slot holds it.
+
 3. **Slice now**, on the Slice and send page. Warnings come first, in
    words. The slice report gives the print time, the filament used,
    and anything the engine complained about. **Preview** describes the
-   print layer by layer.
+   print layer by layer. In a project with several plates you can
+   slice them all or one; one plate gives a printable file holding
+   that plate alone, so it is also the only plate that gets sent.
 
 4. **Send**: straight to a Prusa or Creality printer over your
    network, to a USB drive with one button, or through the slicer's

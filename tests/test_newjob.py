@@ -86,10 +86,12 @@ class CreateProjectTests(unittest.TestCase):
         self.sandbox = support.make_sandbox()
         self.donor = support.copy_test_project(self.sandbox,
                                                name="donor.3mf")
-        # What the engine's merge would hand back: donor object + the
-        # new model, ids preserved.
+        # What the engine's merge would hand back: the donor's object
+        # (carrying the marker name the marked donor copy gave it) +
+        # the new model.
         self.merged = support.copy_test_project(self.sandbox,
                                                 name="merged-fixture.3mf")
+        newjob.mark_objects(self.merged)
         support.add_duplicate_object(self.merged)
         self.script = support.make_fake_merge(self.sandbox)
         self.model = self.sandbox / "second-model.stl"
@@ -134,6 +136,81 @@ class CreateProjectTests(unittest.TestCase):
         self.assertIn("not found", str(ctx.exception))
         self.assertFalse(target.exists())
 
+    def test_new_model_survives_when_the_engine_swaps_ids(self):
+        # The real engine sometimes writes the NEW model under the id
+        # the donor's object had (braille plaque donor, 2026-11-09):
+        # removing by the donor's old id deleted the new model and
+        # kept the old object - the user report. By name it holds.
+        merged = support.copy_test_project(self.sandbox,
+                                           name="swapped-fixture.3mf")
+        donor_id = ProjectSession(self.donor).objects()[0]["id"]
+        support.add_duplicate_object(
+            merged, new_name=newjob.DONOR_MARKER + donor_id)
+        support.rename_object(merged, donor_id, "second-model.stl")
+        self.merged = merged
+        target = self.sandbox / "created.3mf"
+        newjob.create_project("fake.exe", self.donor, [self.model], target)
+        objects = ProjectSession(target).objects()
+        self.assertEqual([(o["id"], o["name"]) for o in objects],
+                         [(donor_id, "second-model.stl")])
+
+    def test_unrecognisable_donor_objects_stop_the_build(self):
+        # Nothing carries the marker: AccessSlice cannot tell old from
+        # new, so it refuses instead of opening a mixed project.
+        merged = support.copy_test_project(self.sandbox,
+                                           name="unmarked-fixture.3mf")
+        support.add_duplicate_object(merged)
+        self.merged = merged
+        target = self.sandbox / "created.3mf"
+        with self.assertRaises(ProjectError) as ctx:
+            newjob.create_project("fake.exe", self.donor,
+                                  [self.model], target)
+        self.assertIn("cannot tell them apart", str(ctx.exception))
+        self.assertFalse(target.exists())
+
+    def test_the_donor_project_itself_is_never_changed(self):
+        before = self.donor.read_bytes()
+        newjob.create_project("fake.exe", self.donor, [self.model],
+                              self.sandbox / "created.3mf")
+        self.assertEqual(self.donor.read_bytes(), before)
+
+    def test_an_engine_crash_is_retried(self):
+        self.behaviour = "crash-once"
+        target = self.sandbox / "created.3mf"
+        newjob.create_project("fake.exe", self.donor, [self.model], target)
+        self.assertEqual([o["name"] for o in
+                          ProjectSession(target).objects()],
+                         ["second-model.stl"])
+
+    def test_repeated_crashes_end_in_plain_words(self):
+        self.behaviour = "crash"
+        target = self.sandbox / "created.3mf"
+        with self.assertRaises(ProjectError) as ctx:
+            newjob.create_project("fake.exe", self.donor,
+                                  [self.model], target)
+        self.assertIn(f"{newjob.MERGE_ATTEMPTS} times in a row",
+                      str(ctx.exception))
+        self.assertFalse(target.exists())
+
+
+class MarkObjectsTests(unittest.TestCase):
+
+    def test_every_object_is_marked_and_parts_keep_their_names(self):
+        sandbox = support.make_sandbox()
+        self.addCleanup(shutil.rmtree, sandbox, ignore_errors=True)
+        project = support.copy_test_project(sandbox)
+        support.add_duplicate_object(project)
+        self.assertEqual(newjob.mark_objects(project), 2)
+        objects = ProjectSession(project).objects()
+        self.assertEqual(sorted(o["name"] for o in objects),
+                         sorted(newjob.DONOR_MARKER + o["id"]
+                                for o in objects))
+        import edit_bambu_3mf as engine
+        ms = engine.load_entries(project)[
+            engine.MODEL_SETTINGS_ENTRY].decode("utf-8")
+        self.assertIn('<metadata key="name" value="blind-Benchy.stl"/>',
+                      ms, "part names are left alone")
+
 
 @unittest.skipUnless(support.real_studio_exe(),
                      "real Bambu Studio not installed")
@@ -141,8 +218,8 @@ class RealNewJobIntegrationTests(unittest.TestCase):
     """Donor + real STL -> real merge -> the created project SLICES.
 
     This pins the whole new-job contract against the real engine: the
-    merge flags, the id-preserving merge behaviour the removal relies
-    on, and - the part upstream breaks for H2-series - that the
+    merge flags, object names surviving the merge (the removal relies
+    on them), and - the part upstream breaks for H2-series - that the
     resulting project is actually sliceable (rc 0, not -66)."""
 
     def test_created_h2c_project_slices_for_real(self):
