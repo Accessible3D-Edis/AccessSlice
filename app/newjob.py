@@ -272,6 +272,14 @@ def create_project(exe, donor_path, model_paths, target_path):
                 "model, and please report it.")
         remove_objects(made, donor_ids)
 
+        # The merge leaves a centred model that nearly fills the plate
+        # on NO plate (169 mm case, A1 mini, reproduced 2026-11-12):
+        # plate 1 then reads as empty and the job cannot be sliced or
+        # sent. Record it on the plate it stands on.
+        session = ProjectSession(made)
+        if session.unplaced_objects():
+            session.place_unplaced_objects(keep_backup=False)
+
         # Prove the result opens before it reaches the projects folder.
         session = ProjectSession(made)
         if not session.objects():

@@ -140,23 +140,51 @@ def browse_button(field_id, kind, what):
 def _empty_plates_html(session, return_to):
     """The empty-plate warning with its Remove button, or "".
 
-    A form of its own - pages place it outside their other forms."""
+    A form of its own - pages place it outside their other forms.
+    Objects the file lists on no plate come first: they make their
+    plate look empty, and putting them on it is the fix."""
+    unplaced_html = _unplaced_objects_html(session, return_to)
     finder = getattr(session, "empty_plates", None)
     empty = finder() if finder else []
     if not empty:
-        return ""
+        return unplaced_html
     if len(empty) == 1:
         which = f"Plate {esc(empty[0])} has nothing on it"
     else:
         which = ("Plates " + ", ".join(esc(p) for p in empty[:-1])
                  + f" and {esc(empty[-1])} have nothing on them")
-    return (f'<div class="unsaved-note"><p>{which}. An empty plate '
+    return (unplaced_html
+            + f'<div class="unsaved-note"><p>{which}. An empty plate '
             "gives the slicer nothing to slice, and when the project "
             "is opened in the slicer to send, its Slice and Send keys "
             "can land on that plate so the job cannot be sent. "
             "Removing it moves the plates after it up a place.</p>"
             + _button_form("/project/remove-empty-plates",
                            "Remove the empty plates",
+                           hidden={"return_to": return_to})
+            + "</div>")
+
+
+def _unplaced_objects_html(session, return_to):
+    """The warning for objects no plate lists, with its button, or ""."""
+    finder = getattr(session, "unplaced_objects", None)
+    unplaced = finder() if finder else []
+    if not unplaced:
+        return ""
+    names = {o["id"]: o["name"] for o in session.objects()}
+    listed = ", ".join(esc(names.get(i, i)) for i in unplaced)
+    one = len(unplaced) == 1
+    return (f'<div class="unsaved-note"><p>{listed} '
+            + ("is" if one else "are")
+            + " not listed on any plate in the file, so its plate looks "
+            "empty, the slicer finds nothing to slice there, and moving "
+            "or copying is refused. Putting "
+            + ("it" if one else "them")
+            + " on the plate "
+            + ("it stands" if one else "they stand")
+            + " on fixes the file; nothing moves.</p>"
+            + _button_form("/project/place-unplaced",
+                           "Put the objects on their plates",
                            hidden={"return_to": return_to})
             + "</div>")
 

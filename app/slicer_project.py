@@ -237,6 +237,19 @@ class ProjectSession:
                 "is unreadable; AccessSlice will rebuild it on the first "
                 "save.")
 
+        unplaced = self.unplaced_objects()
+        if unplaced:
+            names = {o["id"]: o["name"] for o in self.objects()}
+            notes.append(
+                "Project note: "
+                + ", ".join(names.get(i, i) for i in unplaced)
+                + (" is" if len(unplaced) == 1 else " are")
+                + " not listed on any plate in the file, so the slicer "
+                "finds nothing to slice there and moving or copying is "
+                "refused. Press Put the objects on their plates on the "
+                "Placement tab - nothing moves, the file just records "
+                "the plate.")
+
         empty = self.empty_plates()
         if empty:
             notes.append(
@@ -519,8 +532,8 @@ class ProjectSession:
         if current is None:
             raise ProjectError(
                 f"{objs[objectid]['name']} has no plate membership entry "
-                "in the file - save the project from Bambu Studio once "
-                "and try again.")
+                "in the file. Press Put the objects on their plates on the "
+                "Placement tab first.")
         if current == target_plate_id:
             self.pending = [c for c in self.pending
                             if not (c["kind"] == "replate"
@@ -1168,8 +1181,8 @@ class ProjectSession:
         if self.plate_of_object(objectid) is None:
             raise ProjectError(
                 f"{objs[objectid]['name']} has no plate membership entry "
-                "in the file - save the project from the slicer once "
-                "and try again.")
+                "in the file. Press Put the objects on their plates on the "
+                "Placement tab first.")
         if slot is None:
             slot = self._new_slot()
         self.pending = [c for c in self.pending
@@ -1355,8 +1368,8 @@ class ProjectSession:
         if plate_id is None:
             raise ProjectError(
                 f"{objs[objectid]['name']} has no plate membership entry "
-                "in the file - save the project from the slicer once "
-                "and try again.")
+                "in the file. Press Put the objects on their plates on the "
+                "Placement tab first.")
         members = self._plate_members(plate_id)
         (w, d), offset, note = self._footprint(objectid)
         name = objs[objectid]["name"]
@@ -1919,7 +1932,8 @@ class ProjectSession:
     # "blind-benchy - before save 2026-08-27 14.32.05.3mf". Dots in the
     # time because Windows filenames cannot contain colons.
     _BACKUP_STAMP_RE = re.compile(
-        r" - before (save|restore|removing empty plates) "
+        r" - before (save|restore|removing empty plates"
+        r"|placing objects on plates) "
         r"(\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2})(?: \((\d+)\))?\.3mf$")
 
     def backup_dir(self):
@@ -2162,10 +2176,118 @@ class ProjectSession:
         plates = self.plates()
         if len(plates) <= 1:
             return []
-        empty = [p["id"] for p in plates if not p["object_ids"]]
+        # A plate an unlisted object stands on is not empty: removing
+        # it would slide the next plate's objects on top of that one
+        # (what happened to the user's phone case, 2026-11-11).
+        standing = set(self._unplaced_targets().values())
+        empty = [p["id"] for p in plates
+                 if not p["object_ids"] and p["id"] not in standing]
         if len(empty) == len(plates):
             empty = empty[1:]     # a project always keeps one plate
         return empty
+
+    # ------------------------------------------- objects on no plate
+
+    def unplaced_objects(self):
+        """Ids of the objects no plate lists, in file order.
+
+        A Bambu-family file says which plate an object is on with a
+        model_instance record in that plate's block. The engine's
+        merge (new print job, Add model) leaves the record out for a
+        centred model that nearly fills the plate - a 169 mm phone
+        case made with OpenSCAD's center=true on the A1 mini's 180 mm
+        plate, reproduced 2026-11-12. The model stands on plate 1, but
+        the file has it on no plate: plate 1 reads as empty, the
+        engine finds nothing to slice there, and moving or copying the
+        object is refused."""
+        if not self.supports_plates:
+            return []
+        plates = self.plates()
+        if not plates:
+            return []
+        listed = {oid for p in plates for oid in p["object_ids"]}
+        return [o["id"] for o in self.objects() if o["id"] not in listed]
+
+    def _unplaced_targets(self):
+        """{objectid: plate id} for every unlisted object: the plate
+        whose area holds its position, else the first plate."""
+        unplaced = self.unplaced_objects()
+        if not unplaced:
+            return {}
+        plates = self.plates()
+        size = self.plate_size()
+        where = {o["id"]: (o["x"], o["y"]) for o in self.objects()}
+        targets = {}
+        for oid in unplaced:
+            x, y = where[oid]
+            target = plates[0]["id"]
+            for p in plates if size else []:
+                origin = self.plate_origin(p["id"])
+                if origin is None:
+                    break
+                if (origin[0] <= x <= origin[0] + size[0]
+                        and origin[1] <= y <= origin[1] + size[1]):
+                    target = p["id"]
+                    break
+            targets[oid] = target
+        return targets
+
+    def place_unplaced_objects(self, keep_backup=True):
+        """Give every unlisted object a membership record on the plate
+        it stands on, written at once like remove_empty_plates.
+        Nothing moves. Returns plain-language result lines."""
+        targets = self._unplaced_targets()
+        if not targets:
+            return ["Every object is on a plate."]
+        if self.pending:
+            raise ProjectError(
+                "Save or discard the staged changes first (Review "
+                "tab), then put the objects on their plates.")
+        self._ensure_fresh("putting the objects on their plates")
+        names = {o["id"]: o["name"] for o in self.objects()}
+        ms_xml = self.ms_xml
+        for oid, plate_id in targets.items():
+            ms_xml = object_ops.add_instance_bambu(ms_xml, oid, plate_id)
+        entries = dict(self.entries)
+        entries[engine.MODEL_SETTINGS_ENTRY] = ms_xml.encode("utf-8")
+        backup = self._write_entries_now(
+            entries, "placing objects on plates", keep_backup)
+        several = len(self.plates()) > 1
+        lines = ["Put " + ", ".join(
+            names.get(oid, oid)
+            + (f" on plate {pid}" if several else "")
+            for oid, pid in targets.items())
+            + (" on the plate" if not several else "")
+            + ". The file had not listed "
+            + ("it" if len(targets) == 1 else "them")
+            + " on any plate; nothing was moved."]
+        if backup:
+            lines.append(f"The previous version is kept in the backups "
+                         f"folder as {backup.name}.")
+        return lines
+
+    def _write_entries_now(self, entries, reason, keep_backup):
+        """Back up (optionally), write, verify and reload - the direct
+        writes that are not staged changes. Returns the backup path."""
+        backup = self._write_backup(reason) if keep_backup else None
+        try:
+            engine.save_entries(self.path, entries)
+        except OSError as e:
+            if backup:
+                shutil.copy2(backup, self.path)
+            raise ProjectError(
+                f"The project file could not be written ({e}). If it is "
+                "open in the slicer, close it there and try again. "
+                "Nothing was changed.")
+        problems = engine.verify(self.path, list(entries.keys()))
+        if problems:
+            if backup:
+                shutil.copy2(backup, self.path)
+            raise ProjectError(
+                "Verification failed, so the original file was restored "
+                "untouched. Problems: " + "; ".join(problems))
+        self._load()
+        return backup
 
     def remove_empty_plates(self, keep_backup=True):
         """Delete the empty plates and close the gaps, written at once.
@@ -2176,11 +2298,16 @@ class ProjectSession:
         out in the smaller grid. Not a staged change - it is refused
         while changes are staged, so the two never interact. The file
         is backed up, written and verified exactly like a save.
-        Returns plain-language result lines.
+        Returns plain-language result lines. Objects the file lists on
+        no plate are put on theirs first, so a plate one stands on is
+        never taken for empty.
         """
+        placed = []
+        if self.unplaced_objects():
+            placed = self.place_unplaced_objects(keep_backup=keep_backup)
         empty = self.empty_plates()
         if not empty:
-            return ["There are no empty plates to remove."]
+            return placed or ["There are no empty plates to remove."]
         if self.pending:
             raise ProjectError(
                 "Save or discard the staged changes first (Review "
@@ -2274,28 +2401,12 @@ class ProjectSession:
             except (ValueError, AttributeError):
                 del entries[seq_name]
 
-        backup = self._write_backup("removing empty plates") \
-            if keep_backup else None
-        try:
-            engine.save_entries(self.path, entries)
-        except OSError as e:
-            if backup:
-                shutil.copy2(backup, self.path)
-            raise ProjectError(
-                f"The project file could not be written ({e}). If it is "
-                "open in the slicer, close it there and try again. "
-                "Nothing was changed.")
-        problems = engine.verify(self.path, list(entries.keys()))
-        if problems:
-            if backup:
-                shutil.copy2(backup, self.path)
-            raise ProjectError(
-                "Verification failed, so the original file was restored "
-                "untouched. Problems: " + "; ".join(problems))
-        self._load()
+        backup = self._write_entries_now(entries, "removing empty plates",
+                                         keep_backup)
         removed = ", ".join(empty)
         plural = "s" if len(empty) != 1 else ""
-        lines = [f"Removed the empty plate{plural} {removed}. The project "
+        lines = placed[:1] + [
+                 f"Removed the empty plate{plural} {removed}. The project "
                  f"now has {count} plate{'s' if count != 1 else ''}"
                  + (", numbered again from 1." if count > 1 else ".")]
         if backup:
@@ -2600,6 +2711,8 @@ def one_plate_copy(project_path, plate_id, target_path):
     target_path = Path(target_path)
     shutil.copy2(project_path, target_path)
     session = ProjectSession(target_path)
+    if session.unplaced_objects():
+        session.place_unplaced_objects(keep_backup=False)
     plate = next((p for p in session.plates() if p["id"] == str(plate_id)),
                  None)
     if plate is None:

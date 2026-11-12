@@ -369,6 +369,25 @@ def add_plate_bambu(ms_xml):
     return ms_xml, str(new_id)
 
 
+def add_instance_bambu(ms_xml, objectid, plate_id):
+    """Give an object that no plate lists a membership record on
+    plate `plate_id` (instance 0, the next free identify_id) - the
+    shape Studio itself writes."""
+    pm = plate_block_match(ms_xml, plate_id)
+    if pm is None:
+        raise ProjectError(f"No plate {plate_id} in this project.")
+    ident = max_identify_id(ms_xml) + 1
+    inst = ("    <model_instance>\n"
+            f'      <metadata key="object_id" value="{objectid}"/>\n'
+            '      <metadata key="instance_id" value="0"/>\n'
+            f'      <metadata key="identify_id" value="{ident}"/>\n'
+            "    </model_instance>\n")
+    head = ms_xml[:pm.end(1)].rstrip(" ")
+    if not head.endswith("\n"):
+        head += "\n"
+    return head + inst + "  " + ms_xml[pm.end(1):]
+
+
 def move_instance_bambu(ms_xml, objectid, plate_id):
     """Relocate an object's membership record to another plate."""
     inst = ms_instance_block(ms_xml, objectid)

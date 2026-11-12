@@ -674,6 +674,21 @@ def add_duplicate_object(project_path, new_id="102",
     return orig_id
 
 
+def drop_membership(project_path, objectid):
+    """Strip one object's model_instance record, leaving it on no
+    plate - the shape the engine's merge writes for a centred model
+    that nearly fills the plate (a user's phone case, 2026-11)."""
+    import re
+    import edit_bambu_3mf as engine
+    entries = engine.load_entries(project_path)
+    ms = entries[engine.MODEL_SETTINGS_ENTRY].decode("utf-8")
+    ms = re.sub(r'[ \t]*<model_instance>\s*<metadata key="object_id" '
+                r'value="' + re.escape(str(objectid))
+                + r'"/>.*?</model_instance>\n?', "", ms, flags=re.S)
+    entries[engine.MODEL_SETTINGS_ENTRY] = ms.encode("utf-8")
+    engine.save_entries(project_path, entries)
+
+
 def rename_object(project_path, objectid, new_name):
     """Give one object (not its parts) a new name in model_settings."""
     import re

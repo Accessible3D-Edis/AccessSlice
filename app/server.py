@@ -1044,6 +1044,19 @@ class Handler(BaseHTTPRequestHandler):
                             f"{session.path.name}: " + " ".join(lines))
             return self._redirect(return_to, msg=" ".join(lines))
 
+        if parts[1] == "place-unplaced":
+            return_to = field("return_to")
+            if not return_to.startswith("/project/"):
+                return_to = "/project/placement"
+            try:
+                lines = session.place_unplaced_objects()
+            except ProjectError as e:
+                return self._redirect(return_to, msg=f"Problem: {e}")
+            viewport.reset_cache(session)
+            diagnostics.log(f"Objects put on their plates on "
+                            f"{session.path.name}: " + " ".join(lines))
+            return self._redirect(return_to, msg=" ".join(lines))
+
         if parts[1] == "backups":
             lines = session.restore_backup(field("backup"))
             diagnostics.log(f"Restore on {session.path.name}: "

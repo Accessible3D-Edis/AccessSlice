@@ -129,7 +129,7 @@ AccessSlice never needs the internet.
 1. Open the **Releases** page of this project on GitHub:
    https://github.com/Accessible3D-Edis/AccessSlice/releases
 2. Under the newest release, download `AccessSlice-Setup-<version>.exe`
-   (for example `AccessSlice-Setup-1.1.0.exe`).
+   (for example `AccessSlice-Setup-1.1.1.exe`).
 3. Run the downloaded file. The installer is a standard Windows
    installer and reads well with a screen reader. Press Next through
    its pages; the defaults are right for almost everyone.

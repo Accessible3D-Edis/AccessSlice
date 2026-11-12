@@ -216,6 +216,78 @@ class EmptyPlateTests(TwoPlateCase):
                                           self.sandbox / "copy.3mf")
 
 
+class UnplacedObjectTests(TwoPlateCase):
+    """An object the file lists on no plate (the engine's merge wrote
+    a user's 169 mm phone case that way on the A1 mini, 2026-11): its
+    plate looked empty, Remove the empty plates slid plate 2's object
+    on top of it, and the engine refused to parse the project."""
+
+    def setUp(self):
+        super().setUp()
+        support.drop_membership(self.project, "2")
+
+    def test_it_is_found_and_its_plate_is_not_called_empty(self):
+        s = self.session()
+        self.assertEqual(s.unplaced_objects(), ["2"])
+        self.assertEqual(s.empty_plates(), ["2"],
+                         "plate 1 holds it, so only plate 2 is empty")
+        self.assertTrue(any("not listed on any plate" in n
+                            for n in s.structure_notes))
+
+    def test_putting_it_on_its_plate_records_plate_one_and_moves_nothing(self):
+        s = self.session()
+        before = s.objects()[0]
+        lines = s.place_unplaced_objects()
+        self.assertIn("on plate 1", lines[0])
+        fresh = ProjectSession(self.project)
+        self.assertEqual(fresh.unplaced_objects(), [])
+        self.assertEqual(fresh.plate_of_object("2"), "1")
+        after = fresh.objects()[0]
+        self.assertEqual((after["x"], after["y"]),
+                         (before["x"], before["y"]))
+        self.assertTrue(any("placing objects on plates" in b["name"]
+                            for b in fresh.list_backups()))
+
+    def test_one_standing_on_plate_two_goes_on_plate_two(self):
+        s = self.session()
+        s.stage_move("2", 412.5 + 165.0, 160.0)
+        s.save()
+        s = ProjectSession(self.project)
+        s.place_unplaced_objects()
+        self.assertEqual(ProjectSession(self.project).plate_of_object("2"),
+                         "2")
+
+    def test_remove_empty_plates_puts_it_back_before_removing(self):
+        s = self.session()
+        before = s.objects()[0]
+        lines = s.remove_empty_plates()
+        self.assertIn("Put", lines[0])
+        self.assertIn("Removed the empty plate 2", lines[1])
+        fresh = ProjectSession(self.project)
+        self.assertEqual([p["id"] for p in fresh.plates()], ["1"])
+        self.assertEqual(fresh.plate_of_object("2"), "1")
+        self.assertEqual(fresh.objects()[0]["x"], before["x"])
+
+    def test_moving_it_is_refused_with_the_way_out(self):
+        with self.assertRaises(ProjectError) as ctx:
+            self.session().stage_replate("2", "2")
+        self.assertIn("Put the objects on their plates", str(ctx.exception))
+
+    def test_the_pages_offer_the_button(self):
+        html = webui.render_placement_tab(self.session())
+        self.assertIn("/project/place-unplaced", html)
+        self.assertIn("Put the objects on their plates", html)
+        send = webui.render_send(self.session(), "Bambu Studio", False)
+        self.assertIn("/project/place-unplaced", send)
+
+    def test_the_one_plate_copy_finds_it_on_its_plate(self):
+        import slicer_project
+        copy = slicer_project.one_plate_copy(self.project, "1",
+                                             self.sandbox / "copy.3mf")
+        self.assertEqual(ProjectSession(copy).plates()[0]["object_ids"],
+                         ["2"])
+
+
 class PerPlateFilamentMapTests(TwoPlateCase):
 
     def test_each_plate_keeps_its_own_map(self):

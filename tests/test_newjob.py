@@ -168,6 +168,17 @@ class CreateProjectTests(unittest.TestCase):
         self.assertIn("cannot tell them apart", str(ctx.exception))
         self.assertFalse(target.exists())
 
+    def test_a_model_the_merge_left_on_no_plate_lands_on_plate_one(self):
+        # The real engine writes a centred model that nearly fills the
+        # plate without plate membership (169 mm case, A1 mini,
+        # 2026-11-12); the project then could not be sliced or sent.
+        support.drop_membership(self.merged, "102")
+        target = self.sandbox / "created.3mf"
+        newjob.create_project("fake.exe", self.donor, [self.model], target)
+        session = ProjectSession(target)
+        self.assertEqual(session.unplaced_objects(), [])
+        self.assertEqual(session.plates()[0]["object_ids"], ["102"])
+
     def test_the_donor_project_itself_is_never_changed(self):
         before = self.donor.read_bytes()
         newjob.create_project("fake.exe", self.donor, [self.model],
