@@ -302,7 +302,8 @@ def create_project(exe, donor_path, model_paths, target_path):
     try:
         session = ProjectSession(target_path, slicer_exe=exe)
         for p in session.plates():
-            session.stage_arrange(p["id"])
+            _staged, arrange_notes = session.stage_arrange(p["id"])
+            notes.extend(arrange_notes)
         if session.pending:
             session.save()
     except ProjectError:

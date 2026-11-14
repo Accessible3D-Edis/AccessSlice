@@ -2209,22 +2209,48 @@ class Handler(BaseHTTPRequestHandler):
             if pid is not None:
                 origin = session.plate_origin(pid)
             ox, oy = origin if origin else (0.0, 0.0)
+            # The fields show the model's REAL centre (its bounding
+            # box's), which differs from the item translation the file
+            # stores when the model's own origin is a corner (user
+            # report 2026-11-14: Centre put a 176 mm tile's corner at
+            # the plate centre). Translate in and out with the offset.
+            (fw, fd), (cx_off, cy_off), readable = \
+                session.object_footprint(o["id"])
+            moved = next((c for c in session.pending
+                          if c["kind"] == "move"
+                          and c["objectid"] == o["id"]), None)
+            base_x, base_y = moved["new"] if moved else (o["x"], o["y"])
+            shown_x = f"{base_x - ox + cx_off:g}"
+            shown_y = f"{base_y - oy + cy_off:g}"
             if centre_id == o["id"] and plate:
-                lx, ly = plate[0] / 2, plate[1] / 2
+                lx = plate[0] / 2 - cx_off
+                ly = plate[1] / 2 - cy_off
             else:
+                typed_x = (field(f"x__{o['id']}", shown_x) or "").strip()
+                typed_y = (field(f"y__{o['id']}", shown_y) or "").strip()
                 try:
-                    lx = float(field(f"x__{o['id']}", str(o["x"] - ox)))
-                    ly = float(field(f"y__{o['id']}", str(o["y"] - oy)))
+                    # An untouched field (the text the page showed)
+                    # keeps the exact position - rounding in the shown
+                    # text must never stage a hair's-breadth move.
+                    lx = (base_x - ox if typed_x == shown_x
+                          else float(typed_x) - cx_off)
+                    ly = (base_y - oy if typed_y == shown_y
+                          else float(typed_y) - cy_off)
                 except ValueError:
                     raise ProjectError(
                         f"The position for {o['name']} must be numbers "
                         "in millimetres.")
             if session.stage_move(o["id"], lx + ox, ly + oy):
                 staged += 1
-                if plate and not (0 <= lx <= plate[0]
-                                  and 0 <= ly <= plate[1]):
-                    warning = (f" Warning: {o['name']} is now outside the "
-                               f"{plate[0]:g} by {plate[1]:g} mm plate.")
+                if plate:
+                    off = webui._off_plate_warning(
+                        lx + cx_off, ly + cy_off, plate,
+                        (fw, fd) if readable else None)
+                    if off:
+                        warning = (f" Warning: {o['name']} is now "
+                                   "partly or wholly outside the "
+                                   f"{plate[0]:g} by {plate[1]:g} mm "
+                                   "plate.")
             # Move to another plate: the select's baseline is the
             # current plate, so an untouched chooser stages nothing.
             target = field(f"replate__{o['id']}")

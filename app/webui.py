@@ -1773,8 +1773,13 @@ def render_placement_tab(session, msg=None):
         x, y = staged["new"] if staged else (o["x"], o["y"])
         # Show positions in the object's own plate's coordinates.
         origin = origins.get(plate_of.get(o["id"])) or (0.0, 0.0)
-        x, y = x - origin[0], y - origin[1]
-        where = _describe_position(x, y, plate)
+        # ...and as the model's real centre, not the item's anchor
+        # point (they differ for a model whose own origin is a corner).
+        (fw, fd), (cx_off, cy_off), readable = session.object_footprint(
+            o["id"])
+        x, y = x - origin[0] + cx_off, y - origin[1] + cy_off
+        where = _describe_position(x, y, plate,
+                                   (fw, fd) if readable else None)
         facts = session.object_transform_facts(o["id"])
         transform_html = ""
         if facts:
@@ -2226,23 +2231,38 @@ settings</button>
                 project=session.path.name)
 
 
-def _describe_position(x, y, plate):
-    """A position in words: 'centre of the plate' or offsets from centre."""
+def _off_plate_warning(x, y, plate, footprint):
+    """' WARNING: ...' when the footprint centred at (x, y) - or the
+    centre point itself, without a readable footprint - leaves the
+    plate; '' otherwise."""
+    w, d = footprint or (0.0, 0.0)
+    if (x - w / 2 < -0.01 or y - d / 2 < -0.01
+            or x + w / 2 > plate[0] + 0.01 or y + d / 2 > plate[1] + 0.01):
+        if footprint and 0 <= x <= plate[0] and 0 <= y <= plate[1]:
+            return (" WARNING: part of it is outside the build plate "
+                    f"(it is {w:g} by {d:g} mm).")
+        return " WARNING: this is outside the build plate."
+    return ""
+
+
+def _describe_position(x, y, plate, footprint=None):
+    """A position in words: 'centre of the plate' or offsets from
+    centre. x, y is the model's real centre; footprint its (width,
+    depth), so a model whose centre is on the plate but whose edge
+    is not still gets the warning."""
     if not plate:
         return f"Position: X {x:g} mm, Y {y:g} mm."
     cx, cy = plate[0] / 2, plate[1] / 2
     dx, dy = x - cx, y - cy
+    outside = _off_plate_warning(x, y, plate, footprint)
     if abs(dx) < 0.5 and abs(dy) < 0.5:
-        return "Currently at the centre of the plate."
+        return "Currently at the centre of the plate." + outside
     parts = []
     if abs(dx) >= 0.5:
         parts.append(f"{abs(dx):g} mm {'right' if dx > 0 else 'left'} of centre")
     if abs(dy) >= 0.5:
         parts.append(f"{abs(dy):g} mm toward the "
                      f"{'back' if dy > 0 else 'front'}")
-    outside = ""
-    if x < 0 or y < 0 or x > plate[0] or y > plate[1]:
-        outside = " WARNING: this is outside the build plate."
     return "Currently " + " and ".join(parts) + "." + outside
 
 

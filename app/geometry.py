@@ -343,9 +343,23 @@ def arrange_rects(sizes, plate_w, plate_d, gap=ARRANGE_GAP_MM,
     the plate. keepout is the (width, depth) of an excluded front-left
     corner (some printers park a cutter or wiper there); the bundle is
     pushed off it when they would collide.
+
+    The edge margin is a preference, not a limit: when the layout does
+    not fit inside it, the same layout is tried against the plate
+    edges themselves (a 176 mm model on a 180 mm A1 mini plate was
+    refused and left off the plate - user report, 2026-11-14). The
+    caller names what ended up within the margin.
     """
     if not sizes:
         return []
+    spots = _shelf_layout(sizes, plate_w, plate_d, gap, margin, keepout)
+    if spots is None and margin > 0:
+        spots = _shelf_layout(sizes, plate_w, plate_d, gap, 0.0, keepout)
+    return spots
+
+
+def _shelf_layout(sizes, plate_w, plate_d, gap, margin, keepout):
+    """arrange_rects with one fixed edge margin."""
     avail_w = plate_w - 2 * margin
     avail_d = plate_d - 2 * margin
     order = sorted(range(len(sizes)),

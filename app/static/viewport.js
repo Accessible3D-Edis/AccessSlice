@@ -660,8 +660,15 @@
       say("The move could not be staged: the position fields were not found.");
       return;
     }
-    fx.value = (Math.round((wx - o[0]) * 10) / 10).toString();
-    fy.value = (Math.round((wy - o[1]) * 10) / 10).toString();
+    // The fields hold the model's real centre (its bounding box's),
+    // the drag moves the item translation: add the offset between them.
+    var offX = 0, offY = 0;
+    if (obj && obj.bbox && obj.nums) {
+      offX = (obj.bbox[0] + obj.bbox[3]) / 2 - obj.nums[9];
+      offY = (obj.bbox[1] + obj.bbox[4]) / 2 - obj.nums[10];
+    }
+    fx.value = (Math.round((wx - o[0] + offX) * 10) / 10).toString();
+    fy.value = (Math.round((wy - o[1] + offY) * 10) / 10).toString();
     say("Moving " + (obj ? obj.name : "the object") + " to X " + fx.value +
         ", Y " + fy.value + " - staging the change.");
     saveView();

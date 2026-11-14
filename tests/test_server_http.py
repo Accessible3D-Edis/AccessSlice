@@ -16,6 +16,7 @@ verify on disk, close.
 import http.client
 import json
 import os
+import re
 import shutil
 import threading
 import unittest
@@ -411,9 +412,17 @@ class EndToEndTests(unittest.TestCase):
         self.assertIn("rotate", kinds)
         self.assertIn("scale", kinds)
         # An untouched size field (matches its baseline) plus rotation
-        # 0 stages nothing further.
+        # 0 stages nothing further. The position fields go back as the
+        # page shows them: a turned model's real centre is no longer
+        # its anchor point (2026-11-14), so the old 165 / 160 would be
+        # a typed move now.
+        _status, _headers, page_body = get("/project/placement")
+        shown_x = re.search(r'name="x__2" value="([^"]*)"',
+                            page_body).group(1)
+        shown_y = re.search(r'name="y__2" value="([^"]*)"',
+                            page_body).group(1)
         status, headers, _body = post(
-            "/project/placement", x__2="165", y__2="160",
+            "/project/placement", x__2=shown_x, y__2=shown_y,
             rot__2="0", scale__2="100.0", basescale__2="100.0")
         self.assertIn("Nothing changed", location_of(headers))
         # A nonsense rotation is a friendly problem, not a crash.

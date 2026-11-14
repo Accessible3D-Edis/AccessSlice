@@ -1090,6 +1090,9 @@ class ProjectSession:
                    "some to another plate, or scale something down."
                    if self.supports_plates else
                    " Remove some, or scale something down."))
+        notes.extend(self.edge_notes(
+            [(o["name"], s, spot) for o, s, spot in zip(group, sizes, spots)],
+            size))
         staged = 0
         for o, (cx, cy), (ox, oy) in zip(group, spots, offsets):
             if self.stage_move(o["id"], origin[0] + cx - ox,
@@ -1216,6 +1219,38 @@ class ProjectSession:
                 f"The shape of {name} could not be read, so a 50 by 50 "
                 "mm footprint was assumed for it.")
 
+    def object_footprint(self, objectid):
+        """((width, depth), (offset x, offset y), readable) at the
+        object's effective transform. The offset is how far the
+        model's real centre (its bounding box's centre) sits from the
+        item translation: zero for a model Studio centred itself, but
+        a model imported with its corner at its own origin keeps that
+        offset in its part (a 176 mm terrain tile: 88 mm, user report
+        2026-11-14). Positions shown and typed on Placement are the
+        real centre, so the offset is added on the way out and taken
+        off on the way in."""
+        size, offset, note = self._footprint(objectid)
+        return size, offset, note is None
+
+    def edge_notes(self, placed, size=None):
+        """Plain notes for footprints that come closer to a plate edge
+        than the arrange margin. placed: [(name, (w, d), (cx, cy))] in
+        plate-local millimetres."""
+        size = size or self.plate_size()
+        margin = geometry.ARRANGE_MARGIN_MM
+        notes = []
+        if not size:
+            return notes
+        for name, (w, d), (cx, cy) in placed:
+            if (cx - w / 2 < margin - 1e-6 or cy - d / 2 < margin - 1e-6
+                    or cx + w / 2 > size[0] - margin + 1e-6
+                    or cy + d / 2 > size[1] - margin + 1e-6):
+                notes.append(
+                    f"{name} ({w:g} by {d:g} mm) comes closer than "
+                    f"{margin:g} mm to the plate edge, so a brim or "
+                    "skirt may not fit around it.")
+        return notes
+
     def removed_ids(self):
         return {c["objectid"] for c in self.pending if c["kind"] == "remove"}
 
@@ -1300,6 +1335,9 @@ class ProjectSession:
                        "down." if self.supports_plates else
                        " Remove some, or scale something down."))
             placements = [(plate_id, cx, cy) for cx, cy in spots]
+        notes.extend(self.edge_notes(
+            [(n, s, (cx, cy)) for (n, s), (_k, cx, cy)
+             in zip(named, placements)], size))
         return placements, offsets, notes
 
     def _stage_member_placements(self, members, placements, offsets):
