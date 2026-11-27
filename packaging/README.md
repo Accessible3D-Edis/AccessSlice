@@ -3,7 +3,7 @@
 Everything here turns the source tree into the program users install.
 Build machine only; users need none of it.
 
-    pip install pyinstaller pywebview
+    pip install pyinstaller pywebview cascadio
     python packaging\build.py            bundle + installer
     python packaging\build.py --bundle   the PyInstaller bundle only
     python packaging\build.py --unsigned ignore signing.json this time

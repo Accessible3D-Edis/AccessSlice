@@ -49,6 +49,7 @@ import zipfile
 from pathlib import Path
 
 import build_job
+import step_mesh
 from slicer_project import ProjectError, ProjectSession
 import edit_bambu_3mf as engine  # noqa: E402 (slicer_project adds tools/)
 
@@ -202,8 +203,16 @@ def create_project(exe, donor_path, model_paths, target_path):
         shutil.copy2(donor_path, marked_donor)
         donor_count = mark_objects(marked_donor)
 
+        # The engine's command line refuses every STEP file (see
+        # step_mesh), so STEP models go in as AccessSlice's own mesh.
+        if any(step_mesh.is_step(m) for m in models):
+            build_job.stage("Turning the STEP file into a mesh the "
+                            "slicer's engine can read.")
+        engine_models = step_mesh.meshable_models(models, staging)
+
         out_name = "new-project.3mf"
-        cmd = build_merge_command(exe, marked_donor, models, out_name)
+        cmd = build_merge_command(exe, marked_donor, engine_models,
+                                  out_name)
         result = None
         for attempt in range(1, MERGE_ATTEMPTS + 1):
             build_job.stage(

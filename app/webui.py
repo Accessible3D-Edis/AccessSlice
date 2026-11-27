@@ -22,6 +22,7 @@ from urllib.parse import quote as urlquote
 import engine_driver
 import geometry
 from version import VERSION
+import step_mesh
 import toolpath
 import viewport
 # The settings catalog is reached through session.catalog: each
@@ -954,6 +955,13 @@ def render_diagnostics(entries_text, log_path, msg=None):
     else:
         log_html = ("<p>The log is empty - nothing noteworthy has "
                     "happened yet.</p>")
+    if step_mesh.load_kernel() is not None:
+        step_line = ("STEP files: AccessSlice can read them (it turns "
+                     "them into a mesh before the slicer's engine "
+                     "builds the project).")
+    else:
+        step_line = ("STEP files: the part that reads them is missing "
+                     "from this installation - reinstall AccessSlice.")
     body = f"""
 <h1>Diagnostics</h1>
 <p>A dated record of what AccessSlice has done: projects opened, saves,
@@ -962,6 +970,7 @@ unexpected errors, ready to paste into a bug report. Newest entries are
 at the bottom.</p>
 <p>The log lives at: {esc(log_path)}</p>
 <p>AccessSlice version {esc(VERSION)}.</p>
+<p>{esc(step_line)}</p>
 <h2 id="tab-heading" tabindex="-1">Recent entries</h2>
 {log_html}
 {_button_form('/diagnostics/clear', 'Empty the log',

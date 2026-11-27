@@ -129,7 +129,7 @@ AccessSlice never needs the internet.
 1. Open the **Releases** page of this project on GitHub:
    https://github.com/Accessible3D-Edis/AccessSlice/releases
 2. Under the newest release, download `AccessSlice-Setup-<version>.exe`
-   (for example `AccessSlice-Setup-1.1.2.exe`).
+   (for example `AccessSlice-Setup-1.1.3.exe`).
 3. Run the downloaded file. The installer is a standard Windows
    installer and reads well with a screen reader. Press Next through
    its pages; the defaults are right for almost everyone.
@@ -427,7 +427,8 @@ With Python 3.13 installed:
 That opens AccessSlice in your default browser with a console - the
 development mode. The installed program's entry point is
 `app\accessslice_window.py` (its own window; needs
-`pip install pywebview`).
+`pip install pywebview`). Starting a job from a STEP file needs
+`pip install cascadio` (the installed program carries it).
 
 ### Running the tests
 
@@ -440,7 +441,7 @@ never launch a real program. A full run takes about half an hour.
 
 ### Building the installer
 
-    pip install pyinstaller pywebview
+    pip install pyinstaller pywebview cascadio
     python packaging\build.py
 
 That produces the one-folder bundle `packaging\dist\AccessSlice\`

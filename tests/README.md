@@ -5,6 +5,8 @@ Run everything from the project root:
     python -m unittest discover -s tests -v
 
 No extra packages are needed - the suite is stdlib-only, like the app.
+The STEP checks (test_step_mesh.py) mesh real STEP files only when
+cascadio is installed (`pip install cascadio`) and are skipped otherwise.
 The watcher tests genuinely wait for the 1-second polling loop, and
 the real-slicer integration checks run when those slicers are
 installed, so the whole run (761 checks) takes eight to fifteen

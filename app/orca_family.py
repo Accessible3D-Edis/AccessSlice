@@ -39,6 +39,7 @@ Facts probed 2026-09-02 (docs\\log.md):
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -48,6 +49,7 @@ import edit_bambu_3mf as engine
 import geometry
 import newjob
 import profiles
+import step_mesh
 from errors import ProjectError
 from newjob import MODEL_SUFFIXES, unique_target  # noqa: F401
 from slicer_project import ProjectSession
@@ -332,10 +334,16 @@ class FamilyNewJob:
                 path = staging / f"{kind}.json"
                 path.write_text(json.dumps(data, indent=1), encoding="utf-8")
                 files[kind] = path
+            # OrcaSlicer's and Creality Print's command lines refuse
+            # every STEP file (see step_mesh); AccessSlice meshes it.
+            if any(step_mesh.is_step(m) for m in models):
+                build_job.stage("Turning the STEP file into a mesh the "
+                                "slicer's engine can read.")
+            engine_models = step_mesh.meshable_models(models, staging)
             out_name = "built.3mf"
             cmd = build_from_presets_command(
                 exe, files["machine"], files["process"], files["filament"],
-                models, out_name)
+                engine_models, out_name)
             build_job.stage(
                 f"{self.flavour.display_name} is reading the model and "
                 "building the project.")
@@ -371,15 +379,9 @@ class FamilyNewJob:
             ).encode("utf-8")
             engine.save_entries(target, entries)
         finally:
-            for p in staging.glob("*"):
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
-            try:
-                staging.rmdir()
-            except OSError:
-                pass
+            # rmtree, not a file-by-file unlink: STEP meshes live in
+            # subfolders of the staging folder.
+            shutil.rmtree(staging, ignore_errors=True)
         problems = engine.verify(target, list(entries.keys()))
         if not problems:
             try:

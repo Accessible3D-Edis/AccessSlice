@@ -29,10 +29,27 @@ datas = [(str(p), "static") for p in sorted((APP / "static").iterdir())
          if p.is_file()]
 datas.append((str(APP / "prusa_defaults.ini"), "."))
 
+# STEP support (app\step_mesh.py): cascadio's compiled core and the
+# OpenCASCADE DLLs beside it, copied as FILES into the same two
+# folders a normal install has. The cascadio package itself is never
+# imported - its Python half needs numpy, which the bundle does not
+# carry - so step_mesh.load_kernel loads the .pyd directly.
+import importlib.util  # noqa: E402
+_cascadio = Path(importlib.util.find_spec("cascadio").origin).parent
+binaries = [(str(p), "cascadio") for p in _cascadio.glob("_core*.pyd")]
+binaries += [(str(p), "cascadio.libs")
+             for p in sorted((_cascadio.parent / "cascadio.libs").iterdir())]
+if not any(p.endswith(".pyd") for p, _d in binaries):
+    raise SystemExit("cascadio is not installed: pip install cascadio")
+# Its licence travels with it (the dist-info folder does not).
+datas += [(str(p), "cascadio")
+          for p in _cascadio.parent.glob("cascadio-*.dist-info/**/LICENSE*")
+          if p.is_file()]
+
 a = Analysis(
     [str(APP / "accessslice_window.py")],
     pathex=[str(APP), str(ROOT / "tools"), str(APP / "backends")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     # Reached through the registry / sys.path tricks PyInstaller's
     # import scan cannot follow.

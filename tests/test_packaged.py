@@ -141,6 +141,10 @@ class TestPackagedProgram(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(f"AccessSlice version {VERSION}", body)
         self.assertIn("serving without a window", body)
+        # The STEP kernel really loads inside the bundle (its DLLs and
+        # the .pyd travelled, and nothing needs numpy).
+        self.assertIn("STEP files: AccessSlice can read them", body)
+        self.assertFalse((INTERNAL / "numpy").exists())
 
     def test_08_signed_exactly_when_a_signing_configuration_exists(self):
         # The PE certificate table (data directory 4) is non-empty on a

@@ -64,6 +64,19 @@ bundles, unchanged, beside AccessSlice's own code:
   redistributable under Microsoft's WebView2 SDK licence as part of
   an application. The WebView2 *runtime* is not bundled; Windows
   provides it.
+- **cascadio** 0.1.1 (reads STEP files: `_internal\cascadio\_core.pyd`,
+  used by `app/step_mesh.py`) - MIT, copyright 2024 Michael
+  Dawson-Haggerty; its licence text is
+  `_internal\cascadio\LICENSE-cascadio.md`. Only its compiled core
+  ships, not its Python package. Source:
+  https://github.com/trimesh/cascadio
+- **Open CASCADE Technology** (the CAD kernel inside cascadio, the
+  `TK*.dll` files in `_internal\cascadio.libs`) - GNU LGPL 2.1 with
+  the Open CASCADE exception. The DLLs are unmodified and loaded at
+  run time, so they can be replaced with any compatible build.
+  Source: https://github.com/Open-Cascade-SAS/OCCT. The same folder
+  holds Microsoft's C++ runtime (`msvcp140-*.dll`), redistributable
+  under the Visual C++ Redistributable licence.
 - **Inno Setup** builds the installer; its runtime is bundled in the
   installer under the Inno Setup licence, which permits this.
 
