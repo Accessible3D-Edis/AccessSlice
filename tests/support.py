@@ -49,6 +49,12 @@ _GLOBAL_APPDATA = Path(tempfile.mkdtemp(prefix="accessslice-appdata-"))
 os.environ["APPDATA"] = str(_GLOBAL_APPDATA)
 atexit.register(shutil.rmtree, _GLOBAL_APPDATA, ignore_errors=True)
 
+# The suite never goes online: no update check, no usage report - not
+# from the in-process server and not from the packaged AccessSlice.exe
+# (its environment is copied from this one). test_online.py points
+# online.py at a local fake server instead.
+os.environ["ACCESSSLICE_OFFLINE"] = "1"
+
 
 def make_sandbox():
     """A fresh temp folder the caller must remove (or use SandboxCase)."""

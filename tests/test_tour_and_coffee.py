@@ -157,7 +157,7 @@ class TestTourAndCoffeeOverHttp(unittest.TestCase):
     def test_tour_is_in_the_navigation_of_every_page(self):
         configured()
         for url in ("/", "/setup", "/files", "/diagnostics", "/limits",
-                    "/tour"):
+                    "/tour", "/privacy"):
             _s, _h, body = request("GET", url)
             self.assertIn('href="/tour">Help and tour</a>', body, url)
 

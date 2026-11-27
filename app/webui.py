@@ -19,6 +19,8 @@ can meet, which is why AccessSlice is built this way.
 from html import escape as esc
 from urllib.parse import quote as urlquote
 
+import json
+
 import engine_driver
 import geometry
 from version import VERSION
@@ -499,12 +501,60 @@ opens on the home page.</p>
 """
 
 
+def usage_dialog():
+    """The one-time question about anonymous usage statistics
+    (online.py has the rules). A modal like the coffee pop-up; Escape
+    counts as "No, thank you" - nothing is sent unless the user says
+    yes."""
+    return """
+<dialog open class="coffee" id="usage-dialog"
+        aria-labelledby="usage-heading" aria-describedby="usage-text">
+<h2 id="usage-heading">Help improve AccessSlice?</h2>
+<p id="usage-text">May AccessSlice send its developer a short anonymous
+report once a week? It counts how AccessSlice is used - how many print
+jobs, slices and sends, the slicer and printer models, and how many
+problems came up - so the work goes where it helps most. It never
+sends file names, folders, printer serial numbers or anything about
+you. The Privacy page, on the Home page, shows exactly what is sent
+and changes your answer any time.</p>
+<div class="actions">
+<form method="post" action="/usage/answer" class="inline-form"><input
+type="hidden" name="answer" value="yes"><button class="primary"
+id="usage-yes" autofocus>Yes, send anonymous reports</button></form>
+<form method="post" action="/usage/answer" class="inline-form"
+id="usage-no-form"><input type="hidden" name="answer" value="no"><button
+id="usage-no">No, thank you</button></form>
+</div>
+</dialog>
+"""
+
+
+def update_notice(found):
+    """The Home page's "a newer version is out" section.
+    found: (version, url, notes) from online.update_available."""
+    version, _url, notes = found
+    notes_html = f"<p>{esc(notes)}</p>" if notes else ""
+    return f"""
+<section class="update-notice" aria-labelledby="update-heading">
+<h2 id="update-heading">AccessSlice {esc(version)} is available</h2>
+<p>You have version {esc(VERSION)}. Installing the new version keeps
+your settings.</p>
+{notes_html}
+{_button_form('/update/open', f'Download AccessSlice {version} (opens your browser)', cls='primary')}
+</section>
+"""
+
+
 def render_home(config, recents, msg=None, slicer_name="your slicer",
-                coffee=False, printer=False, control=False):
+                coffee=False, printer=False, control=False,
+                usage_question=False, update=None):
     """Screen 2 - home. recents: list of (path, display_line);
     coffee: show the monthly buy-me-a-coffee pop-up; printer: the active
     slicer's printer can be asked directly (the Printer status page
-    is offered, so a running print can be followed after a restart)."""
+    is offered, so a running print can be followed after a restart);
+    usage_question: ask the one-time usage-statistics question (never
+    together with the coffee pop-up); update: (version, url, notes)
+    of a newer AccessSlice to announce, or None."""
     printer_html = (
         '<li><a href="/printer"><strong>Printer status</strong> What your '
         "printer is doing right now - progress and time left of a running "
@@ -541,7 +591,9 @@ any time under <a href="/setup">Settings</a>.</p>
 <a class="button" href="/files">Open a project file</a>
 </div>
 </div>
+{update_notice(update) if update else ""}
 {coffee_dialog() if coffee else ""}
+{usage_dialog() if usage_question and not coffee else ""}
 {recent_html}
 <h2>More</h2>
 <ul class="link-cards">
@@ -556,10 +608,94 @@ project.</a></li>
 AccessSlice has been doing, for when something seems off.</a></li>
 <li><a href="/limits"><strong>What AccessSlice cannot edit</strong>
 Honest limits and their workarounds.</a></li>
+<li><a href="/privacy"><strong>Privacy and updates</strong> What
+AccessSlice sends over the internet - the update check and the
+anonymous usage reports - and the switches for both.</a></li>
 {_button_form('/coffee/open', 'Support AccessSlice - buy me a coffee (opens your browser)') if not coffee else ''}
 </ul>
 """
     return page("Home", body, msg=msg)
+
+
+def render_privacy(update_on, usage_on, usage_asked, payload, state,
+                   events, msg=None):
+    """The Privacy page: everything AccessSlice sends, and the two
+    switches. payload: the exact next usage report (shown when usage
+    statistics are on); state: online.json's contents; events: the
+    counted events with their plain descriptions."""
+    checked = (state.get("last_update_check") or "")[:16].replace("T", " ")
+    latest = (state.get("latest") or {}).get("version")
+    if update_on:
+        update_status = (
+            "<p>The update check is <strong>on</strong>. Once a day "
+            "AccessSlice asks accessible3d.io for the newest version, "
+            "sending only its own version number (" + esc(VERSION)
+            + "). A newer version is announced on the Home page; "
+            "nothing is downloaded or installed without you.</p>"
+            + (f"<p>Last checked: {esc(checked)}"
+               + (f". Newest version: {esc(latest)}." if latest else ".")
+               + "</p>" if checked else
+               "<p>Not checked yet.</p>")
+            + _button_form("/privacy/update-check", "Turn the update "
+                           "check off", hidden={"on": "no"}))
+    else:
+        update_status = (
+            "<p>The update check is <strong>off</strong>. AccessSlice "
+            "does not look for new versions; check "
+            "accessible3d.io/software/accessslice yourself now and "
+            "then.</p>"
+            + _button_form("/privacy/update-check", "Turn the update "
+                           "check on", hidden={"on": "yes"}))
+
+    event_items = "".join(f"<li>{esc(text)}</li>"
+                          for text in events.values())
+    if usage_on:
+        since = (state.get("period_start") or "")[:10]
+        sent = (state.get("last_report_sent") or "")[:10]
+        usage_status = (
+            "<p>Anonymous usage reports are <strong>on</strong>. Thank "
+            "you! Counting since " + esc(since) + "; a report is sent "
+            "about once a week"
+            + (f", the last one on {esc(sent)}" if sent else "") + ".</p>"
+            "<h3>Exactly what the next report contains</h3>"
+            '<pre class="diagnostics-log">'
+            + esc(json.dumps(payload, indent=2)) + "</pre>"
+            + _button_form("/privacy/usage", "Turn usage reports off and "
+                           "delete what was counted", hidden={"on": "no"}))
+    else:
+        usage_status = (
+            "<p>Anonymous usage reports are <strong>off</strong>"
+            + ("" if usage_asked else " - you have not been asked yet")
+            + ". Nothing about how you use AccessSlice is counted or "
+            "sent.</p>"
+            + _button_form("/privacy/usage", "Turn anonymous usage "
+                           "reports on", hidden={"on": "yes"}))
+
+    body = f"""
+<h1>Privacy and updates</h1>
+<p>AccessSlice works on your computer. Apart from talking to your
+printer and opening web pages you ask for, it only ever sends the two
+things on this page over the internet - and only to accessible3d.io,
+the home of AccessSlice.</p>
+<h2 id="tab-heading" tabindex="-1">The update check</h2>
+{update_status}
+<h2>Anonymous usage reports</h2>
+<p>When they are on, a report goes out about once a week with a
+random install number (it is not linked to you and changes if you
+turn the reports off and on again), the AccessSlice and Windows
+versions, the active slicer, the printer models used (a printer
+profile you named yourself is reported only as "custom profile") and
+these counts:</p>
+<ul>{event_items}</ul>
+{usage_status}
+<h2>Never sent</h2>
+<p>File names, folders, models, projects, printer serial numbers,
+printer addresses or passwords, anything you type, and your name or
+e-mail address. The website does not keep the internet address the
+reports come from.</p>
+<p><a href="/">Home</a></p>
+"""
+    return page("Privacy and updates", body, msg=msg)
 
 
 # ---------------------------------------------------------------- tour

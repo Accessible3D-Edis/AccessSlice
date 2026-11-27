@@ -131,6 +131,24 @@
     });
   }
 
+  // The one-time usage-statistics question works the same way.
+  // Escape is "No, thank you": nothing is sent unless the user says
+  // yes, and the question does not come back.
+  var usageDialog = document.getElementById("usage-dialog");
+  if (usageDialog && typeof usageDialog.showModal === "function") {
+    try {
+      usageDialog.close();
+      usageDialog.showModal();
+      var usageFirst = document.getElementById("usage-yes");
+      if (usageFirst) usageFirst.focus();
+    } catch (err) { /* stays an open, non-modal dialog */ }
+    usageDialog.addEventListener("cancel", function (e) {
+      e.preventDefault();
+      var no = document.getElementById("usage-no-form");
+      if (no) no.submit();
+    });
+  }
+
   /* -------------------------------------------------- announcements */
 
   // Never blank the status region while focus is ON it - clearing the

@@ -6,7 +6,10 @@ ships (pywebview opens it). Screen readers read WebView2 exactly as
 they read Edge, so everything the page promises holds inside the
 window too. This module does three things and nothing else:
 
-1. starts the local server on 127.0.0.1 (nothing leaves the machine),
+1. starts the local server on 127.0.0.1, and beside it the background
+   thread of online.py (the daily update check and, only when the
+   user said yes, the weekly anonymous usage report - the only things
+   AccessSlice sends over the internet on its own),
 2. opens the window on it and waits until the user closes the window,
 3. stops the server - nothing keeps running behind a closed window.
 
@@ -28,6 +31,7 @@ import threading
 import webbrowser
 
 import diagnostics
+import online
 import server
 from version import VERSION
 
@@ -63,6 +67,7 @@ def start_server(port):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True,
                               name="accessslice-server")
     thread.start()
+    online.start_background()  # does nothing when offline (tests)
     return httpd
 
 
@@ -126,6 +131,7 @@ def run(open_window_fn=open_window, fallback_fn=browser_fallback,
     url = f"http://127.0.0.1:{port}/"
     httpd = start_server(port)
     diagnostics.log(f"AccessSlice {VERSION} started as a window on {url}")
+    online.count("app_starts")
     try:
         try:
             open_window_fn(url)

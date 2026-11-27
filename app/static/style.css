@@ -484,6 +484,17 @@ nav ul.tabs a[aria-current="page"] {
   max-width: min(36rem, calc(100vw - 2rem));
 }
 .coffee::backdrop { background: rgba(0, 0, 0, 0.55); }
+/* The Home page's "a newer version is available" section. */
+.update-notice {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-5);
+  margin: var(--space-4) 0;
+}
+.update-notice h2 { margin-top: 0; }
 .coffee h2 { margin-top: 0; }
 .coffee .actions { margin-top: var(--space-3); }
 .tab-help { margin: 0 0 var(--space-3); font-size: var(--text-sm); }

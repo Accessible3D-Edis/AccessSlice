@@ -122,14 +122,15 @@ The details and sources are in `docs/printer-compatibility.md`.
 - For Prusa and Creality printers: the printer and this computer on
   the same home network.
 
-AccessSlice never needs the internet.
+AccessSlice never needs the internet. With an internet connection it
+can tell you when a new version is out (see Privacy and safety).
 
 ## Installing AccessSlice
 
 1. Open the **Releases** page of this project on GitHub:
    https://github.com/Accessible3D-Edis/AccessSlice/releases
 2. Under the newest release, download `AccessSlice-Setup-<version>.exe`
-   (for example `AccessSlice-Setup-1.1.3.exe`).
+   (for example `AccessSlice-Setup-1.2.0.exe`).
 3. Run the downloaded file. The installer is a standard Windows
    installer and reads well with a screen reader. Press Next through
    its pages; the defaults are right for almost everyone.
@@ -349,13 +350,27 @@ and can be read at any time.
 
 ## Privacy and safety
 
-- **Nothing leaves your computer** unless you press a button that
-  says so. AccessSlice talks only to itself (on 127.0.0.1) and, when
-  you send or follow a print, to your own printer on your own
-  network. It never uses the internet and contains no tracking or
-  statistics.
-- The only exception is **Buy me a coffee**: pressing it opens the
-  donation page in your normal web browser. Nothing is sent about you.
+- **Your models and projects never leave your computer.** AccessSlice
+  talks to itself (on 127.0.0.1), to your own printer on your own
+  network when you send or follow a print, and to accessible3d.io for
+  the two things below - nothing else.
+- **The update check** (on; switch it off on the Privacy page, linked
+  from Home): once a day AccessSlice asks accessible3d.io for the
+  newest version, sending only its own version number. A newer
+  version is announced on the Home page with a button that opens the
+  download page in your browser. Nothing is downloaded or installed
+  by itself.
+- **Anonymous usage reports** (off unless you say yes; AccessSlice
+  asks once): about once a week, a random install number, the
+  AccessSlice and Windows versions, the slicer, the printer models and
+  counts such as how many print jobs, slices, sends and problems there
+  were. Never file names, folders, printer serial numbers or
+  addresses, passwords, anything you type or anything about you. The
+  Privacy page shows the exact report before it is sent; turning
+  reports off deletes what was counted. The website does not keep the
+  internet address the reports or update checks come from.
+- **Buy me a coffee**: pressing it opens the donation page in your
+  normal web browser. Nothing is sent about you.
 - AccessSlice refuses requests that do not come from its own window,
   so a website open in your browser cannot reach it.
 - **Your files are safe.** Every save keeps a backup (the last ten are
@@ -482,6 +497,10 @@ itself. Code signing is one configuration file away; see
   - `config_store.py` - the saved configuration in AppData (printer
     passwords DPAPI-protected).
   - `coffee.py` - the buy-me-a-coffee pop-up's rules.
+  - `online.py` - the update check and the opt-in anonymous usage
+    reports, the only things sent to accessible3d.io.
+  - `step_mesh.py` - STEP models meshed before the slicer's engine
+    builds the project.
   - `diagnostics.py` - the activity log behind the Diagnostics page.
   - `static/` - the stylesheet (light and dark), the app's script, the
     3D view and preview scripts, and the vendored Three.js (MIT).

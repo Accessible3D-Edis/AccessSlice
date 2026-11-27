@@ -68,6 +68,8 @@ import backends
 import build_job
 import config_store
 import coffee
+import online
+import step_mesh
 import wizard
 import diagnostics
 import filedialog
@@ -199,6 +201,7 @@ def launch_slicer(config, file_path=None):
     diagnostics.log("Launched the slicer"
                     + (f" with {Path(file_path).name}" if file_path
                        else ""))
+    online.count("slicer_opened")
 
 
 def device_plan(config, machine):
@@ -402,6 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
         except ProjectError as e:
             diagnostics.log(f"Problem shown to the user: {e}")
+            online.count("problems_shown")
             self._send_error_page(webui.page(
                 "Problem", f"<h1>Problem</h1>"
                 f"<p>{webui.esc(str(e))}</p>"
@@ -414,6 +418,7 @@ class Handler(BaseHTTPRequestHandler):
         technical traceback in the diagnostics log."""
         context = f"{doing_what} ({self.path})"
         diagnostics.log_exception(context, exc)
+        online.count("unexpected_errors")
         self._send_error_page(webui.page(
             "Unexpected problem",
             "<h1>Unexpected problem</h1>"
@@ -460,7 +465,9 @@ class Handler(BaseHTTPRequestHandler):
                 coffee=coffee.due(config),
                 printer=backend_for(config).lan is not None,
                 control=getattr(backend_for(config).lan, "CAN_CONTROL",
-                                False)))
+                                False),
+                usage_question=not online.usage_asked(config),
+                update=online.update_available(config)))
         if parts == ["tour"]:
             first = self._query().get("first", [""])[0] == "1"
             return self._send_html(webui.render_tour(
@@ -635,6 +642,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_html(webui.render_files(
                 config.get("projects_dir", ""),
                 self._folder_entries(config), msg=self._msg()))
+
+        if parts == ["privacy"]:
+            # Not "state": that name is the server's global state.
+            saved = online.load_state()
+            return self._send_html(webui.render_privacy(
+                online.update_check_enabled(config),
+                online.usage_enabled(config),
+                online.usage_asked(config),
+                online.report_payload(config, saved), saved,
+                online.EVENTS, msg=self._msg()))
 
         if parts == ["diagnostics"]:
             return self._send_html(webui.render_diagnostics(
@@ -877,6 +894,7 @@ class Handler(BaseHTTPRequestHandler):
         except ProjectError as e:
             # Friendly failure: back to a sensible page with the message.
             diagnostics.log(f"Problem shown to the user: {e}")
+            online.count("problems_shown")
             target = "/project/review" if state["session"] else "/"
             try:
                 self._redirect(target, msg=f"Problem: {e}")
@@ -934,6 +952,39 @@ class Handler(BaseHTTPRequestHandler):
             return self._redirect("/", msg=(
                 "No problem - AccessSlice will ask again in about a "
                 "month."))
+        if parts == ["usage", "answer"]:
+            yes = field("answer") == "yes"
+            config_store.save(online.set_usage(config, yes))
+            diagnostics.log("Anonymous usage reports "
+                            + ("turned on" if yes else "declined"))
+            return self._redirect("/", msg=(
+                "Thank you - AccessSlice will send an anonymous report "
+                "about once a week. The Privacy page shows exactly what "
+                "is sent." if yes else
+                "Understood - nothing about how you use AccessSlice is "
+                "sent. The Privacy page changes this any time."))
+        if parts == ["privacy", "usage"]:
+            on = field("on") == "yes"
+            config_store.save(online.set_usage(config, on))
+            diagnostics.log("Anonymous usage reports turned "
+                            + ("on" if on else "off"))
+            return self._redirect("/privacy", msg=(
+                "Anonymous usage reports are on." if on else
+                "Anonymous usage reports are off, and what was counted "
+                "so far is deleted."))
+        if parts == ["privacy", "update-check"]:
+            on = field("on") == "yes"
+            config_store.save(online.set_update_check(config, on))
+            diagnostics.log("Update check turned "
+                            + ("on" if on else "off"))
+            return self._redirect("/privacy", msg=(
+                "The update check is on." if on else
+                "The update check is off."))
+        if parts == ["update", "open"]:
+            url = online.open_download(config)
+            diagnostics.log(f"Opened the download page {url}")
+            return self._redirect("/", msg=(
+                f"Opened {url} in your web browser."))
 
         if parts[:1] == ["printer"] and len(parts) >= 2:
             return self._post_printer(config, parts[1:], form, field)
@@ -1111,6 +1162,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._post_copy_usb(session, config, field)
             except ProjectError as e:
                 diagnostics.log(f"Problem shown to the user: {e}")
+                online.count("problems_shown")
                 return self._redirect("/project/slice-report",
                                       msg=f"Problem: {e}")
 
@@ -1379,6 +1431,7 @@ class Handler(BaseHTTPRequestHandler):
                         + lan.status_lines(merged)[0])
                 getattr(lan, action + "_print")(ip)
                 diagnostics.log(f"Printer asked to {action} its print")
+                online.count("printer_controls")
                 done = {"pause": "paused", "resume": "resumed",
                         "stop": "stopped"}[action]
                 return self._redirect("/printer/control", msg=(
@@ -1395,6 +1448,7 @@ class Handler(BaseHTTPRequestHandler):
                     + lan.status_lines(merged)[0])
             getattr(lan, action + "_job")(ip, job_id, **kwargs)
             diagnostics.log(f"Printer job {job_id} asked to {action}")
+            online.count("printer_controls")
             done = {"pause": "paused", "resume": "resumed",
                     "stop": "stopped"}[action]
             return self._redirect("/printer/control", msg=(
@@ -1445,6 +1499,7 @@ class Handler(BaseHTTPRequestHandler):
                     "wreck the printer.")
             lan.start_print(ip, path, **kwargs)
             diagnostics.log(f"Printer asked to print {path}")
+            online.count("printer_controls")
             return self._redirect("/printer", msg=(
                 f"Asked the printer to print {path}. The lines below "
                 "are the printer's own report."))
@@ -1455,6 +1510,7 @@ class Handler(BaseHTTPRequestHandler):
                     "the Delete button first.")
             lan.delete_file(ip, path, **kwargs)
             diagnostics.log(f"Deleted {path} from the printer")
+            online.count("printer_controls")
             return self._redirect(back, msg=f"Deleted {path} from the "
                                             "printer.")
         if verb == "upload":
@@ -1478,6 +1534,7 @@ class Handler(BaseHTTPRequestHandler):
             lan.upload_gcode(ip, target, data, **kwargs)
             diagnostics.log(f"Uploaded {source} to the printer as "
                             f"{target}")
+            online.count("printer_controls")
             if field("start") == "yes":
                 lan.start_print(ip, target, **kwargs)
                 return self._redirect("/printer", msg=(
@@ -1801,6 +1858,7 @@ class Handler(BaseHTTPRequestHandler):
             f"Opened {session.path.name} (written by "
             f"{session.application}, "
             f"{len(session.structure_notes)} structure note(s))")
+        online.count("projects_opened")
         # Structure notes are spoken with the open message AND stay
         # visible on every editor page until the project is closed.
         notes = " ".join(session.structure_notes)
@@ -1911,10 +1969,14 @@ class Handler(BaseHTTPRequestHandler):
         if job.status == "failed":
             diagnostics.log(f"New job from {job.model_name} failed: "
                             f"{job.error}")
+            online.count("jobs_failed")
             return self._redirect("/start", msg=f"Problem: {job.error}")
         diagnostics.log(f"New job: created {job.target.name} from "
                         f"{job.model_name} (donor {job.donor_name}) in "
                         f"{job.elapsed()} s")
+        online.count("jobs_created", printer=job.printer)
+        if step_mesh.is_step(job.model_name):
+            online.count("jobs_from_step")
         learn(config, "known_printers", [job.printer])
         try:
             return self._open_project(str(job.target), config,
@@ -2762,6 +2824,7 @@ class Handler(BaseHTTPRequestHandler):
         diagnostics.log(
             f"LAN send: uploaded {name} ({len(data) // 1024} KB) to "
             f"{ip} and asked it to start")
+        online.count("sends_network")
         return self._redirect("/printer", msg=(
             f"Uploaded {name} to the printer and asked it to start. "
             "The lines below are the printer's own report - check "
@@ -2787,6 +2850,7 @@ class Handler(BaseHTTPRequestHandler):
                    and backend.lan is not None else None)
         copied = usbcopy.copy_to(out, target, extract=extract)
         diagnostics.log(f"Copied {copied.name} to {copied.parent}")
+        online.count("sends_usb")
         return self._redirect("/project/slice-report", msg=(
             f"Copied {copied.name} to {copied.parent}. "
             + usbcopy.after_copy_note(target)))
@@ -2868,6 +2932,9 @@ class Handler(BaseHTTPRequestHandler):
             plate = "0"
 
         engine = backend_for(config).engine
+        # Read now: the outcome is logged on the slicer's thread.
+        printer = (getattr(session, "settings", None) or {}).get(
+            "printer_settings_id", "")
 
         def log_outcome(finished):
             e = finished.elapsed()
@@ -2878,12 +2945,14 @@ class Handler(BaseHTTPRequestHandler):
                     f"{engine.friendly_duration(r['total_time_s'])}"
                     f" print time, {r['total_grams']:.1f} g, "
                     f"{len(r['warnings'])} warning(s)")
+                online.count("slices_done", printer=printer)
             elif finished.status != "cancelled":
                 problem = (finished.report or {}).get("error_string") \
                     or (finished.report or {}).get("problem") or ""
                 diagnostics.log(
                     f"Slice {finished.status} on {session.path.name} "
                     f"after {e} s: {problem}")
+                online.count("slices_failed", printer=printer)
 
         # One plate of several: the engine slices a copy holding that
         # plate alone, so the printable file has no other plate for

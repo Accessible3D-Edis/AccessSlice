@@ -146,6 +146,15 @@ class TestPackagedProgram(unittest.TestCase):
         self.assertIn("STEP files: AccessSlice can read them", body)
         self.assertFalse((INTERNAL / "numpy").exists())
 
+    def test_09_privacy_page_from_the_bundle(self):
+        # online.py travelled, and the suite's ACCESSSLICE_OFFLINE
+        # reached the exe (its environment is copied), so this run
+        # never contacted accessible3d.io.
+        status, _h, body = self.request("GET", "/privacy")
+        self.assertEqual(status, 200)
+        self.assertIn("Privacy and updates", body)
+        self.assertIn("Not checked yet.", body)
+
     def test_08_signed_exactly_when_a_signing_configuration_exists(self):
         # The PE certificate table (data directory 4) is non-empty on a
         # signed file. PE32+: optional header at pe+24, directories at
